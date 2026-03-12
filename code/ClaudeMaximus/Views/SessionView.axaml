@@ -7,7 +7,7 @@
              x:Class="ClaudeMaximus.Views.SessionView"
              x:DataType="vm:SessionViewModel">
 
-    <Grid RowDefinitions="Auto,*,5,150">
+    <Grid RowDefinitions="Auto,*,Auto,5,150">
 
         <!-- Row 0: Session name header -->
         <Border Grid.Row="0"
@@ -24,7 +24,6 @@
                       x:Name="MessageScroller"
                       HorizontalScrollBarVisibility="Disabled"
                       VerticalScrollBarVisibility="Auto">
-            <StackPanel>
             <ItemsControl x:Name="MessageList"
                           ItemsSource="{Binding Messages}"
                           Margin="0,4,0,4">
@@ -69,7 +68,7 @@
                                     Margin="20,4,20,4"
                                     Padding="8,5"
                                     CornerRadius="4"
-                                    Background="#2A2A2A">
+                                    Background="#505050">
                                 <SelectableTextBlock Text="{Binding Content}"
                                                      TextWrapping="Wrap"
                                                      FontSize="12"
@@ -96,25 +95,25 @@
 
                 </ItemsControl.DataTemplates>
             </ItemsControl>
-
-            <!-- "Claude is thinking" indicator — sits below the last message bubble -->
-            <TextBlock Text="Claude is thinking…"
-                       IsVisible="{Binding IsBusy}"
-                       Margin="8,4,60,8"
-                       Foreground="White"
-                       Opacity="0.5"
-                       FontStyle="Italic"
-                       FontSize="13"/>
-            </StackPanel>
         </ScrollViewer>
 
-        <!-- Row 2: Vertical splitter -->
-        <GridSplitter Grid.Row="2"
+        <!-- Row 2: "Claude is thinking" indicator — outside scroll so it's always visible -->
+        <TextBlock Grid.Row="2"
+                   Text="Claude is thinking…"
+                   IsVisible="{Binding IsBusy}"
+                   Margin="8,4,60,4"
+                   Foreground="White"
+                   Opacity="0.5"
+                   FontStyle="Italic"
+                   FontSize="13"/>
+
+        <!-- Row 3: Vertical splitter -->
+        <GridSplitter Grid.Row="3"
                       ResizeDirection="Rows"
                       Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
 
-        <!-- Row 3: Input area -->
-        <Border Grid.Row="3"
+        <!-- Row 4: Input area -->
+        <Border Grid.Row="4"
                 Padding="8"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
                 BorderThickness="0,1,0,0">
