@@ -14,19 +14,26 @@ public sealed class DirectoryLabelService : IDirectoryLabelService
 	/// </summary>
 	public string GetLabel(string directoryPath)
 	{
-		var normalised = Path.GetFullPath(directoryPath);
-		var gitRoot = FindGitRoot(normalised);
+		// TrimEnd separators so Path.GetFileName never returns empty string
+		// for paths like "C:\datum_api\" that come from folder pickers.
+		var normalised = TrimSeparators(Path.GetFullPath(directoryPath));
+		var gitRoot    = FindGitRoot(normalised);
 
 		if (gitRoot == null)
 			return normalised;
+
+		gitRoot = TrimSeparators(gitRoot);
 
 		if (string.Equals(gitRoot, normalised, System.StringComparison.OrdinalIgnoreCase))
 			return Path.GetFileName(normalised);
 
 		var gitRootName = Path.GetFileName(gitRoot);
-		var relative = Path.GetRelativePath(gitRoot, normalised);
+		var relative    = Path.GetRelativePath(gitRoot, normalised);
 		return Path.Combine(gitRootName, relative);
 	}
+
+	private static string TrimSeparators(string path)
+		=> path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
 	private static string? FindGitRoot(string startPath)
 	{

@@ -28,6 +28,27 @@ public sealed class DirectoryLabelServiceTests
 	}
 
 	[Fact]
+	public void GetLabel_WhenGitRootIsTheDirectory_WithTrailingSeparator_ReturnsDirectoryNameOnly()
+	{
+		var tempDir = Path.Combine(Path.GetTempPath(), "cm_test_gitroot_trail");
+		var gitDir  = Path.Combine(tempDir, ".git");
+		Directory.CreateDirectory(gitDir);
+
+		try
+		{
+			// Folder pickers on Windows return paths with a trailing separator
+			var pathWithTrailingSep = tempDir + Path.DirectorySeparatorChar;
+			var label = _sut.GetLabel(pathWithTrailingSep);
+			Assert.Equal("cm_test_gitroot_trail", label);
+			Assert.NotEmpty(label);
+		}
+		finally
+		{
+			Directory.Delete(tempDir, recursive: true);
+		}
+	}
+
+	[Fact]
 	public void GetLabel_WhenGitRootIsAncestor_ReturnsGitRootNamePlusRelativePath()
 	{
 		var tempDir = Path.Combine(Path.GetTempPath(), "cm_test_ancestor");
