@@ -68,6 +68,7 @@ public partial class App : Application
 		services.AddSingleton<IAppSettingsService, AppSettingsService>();
 		services.AddSingleton<IDirectoryLabelService, DirectoryLabelService>();
 		services.AddSingleton<ISessionFileService, SessionFileService>();
+		services.AddSingleton<IDraftService, DraftService>();
 		services.AddSingleton<IClaudeProcessManager, ClaudeProcessManager>();
 		services.AddSingleton<SessionTreeViewModel>();
 		services.AddSingleton<MainWindowViewModel>();

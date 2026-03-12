@@ -12,6 +12,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private readonly IAppSettingsService _appSettings;
 	private readonly ISessionFileService _fileService;
 	private readonly IClaudeProcessManager _processManager;
+	private readonly IDraftService _draftService;
 	private readonly Dictionary<string, SessionViewModel> _sessionCache = new();
 	private double _splitterPosition;
 	private SessionViewModel? _activeSession;
@@ -41,11 +42,13 @@ public sealed class MainWindowViewModel : ViewModelBase
 		IAppSettingsService appSettings,
 		ISessionFileService fileService,
 		IClaudeProcessManager processManager,
+		IDraftService draftService,
 		SessionTreeViewModel sessionTree)
 	{
 		_appSettings    = appSettings;
 		_fileService    = fileService;
 		_processManager = processManager;
+		_draftService   = draftService;
 		SessionTree     = sessionTree;
 		_splitterPosition = appSettings.Settings.Window.SplitterPosition;
 
@@ -67,7 +70,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 
 		if (!_sessionCache.TryGetValue(node.FileName, out var vm))
 		{
-			vm = new SessionViewModel(node, _fileService, _processManager, _appSettings);
+			vm = new SessionViewModel(node, _fileService, _processManager, _appSettings, _draftService);
 			vm.LoadFromFile();
 			_sessionCache[node.FileName] = vm;
 		}
