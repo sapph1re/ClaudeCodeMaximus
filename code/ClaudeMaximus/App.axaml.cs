@@ -37,6 +37,8 @@ public partial class App : Application
 			{
 				DataContext = Services.GetRequiredService<MainWindowViewModel>(),
 			};
+
+			desktop.Exit += (_, _) => Services.GetRequiredService<ISelfUpdateService>().CheckAndTriggerUpdate();
 		}
 
 		base.OnFrameworkInitializationCompleted();
@@ -70,6 +72,7 @@ public partial class App : Application
 		services.AddSingleton<ISessionFileService, SessionFileService>();
 		services.AddSingleton<IDraftService, DraftService>();
 		services.AddSingleton<IClaudeProcessManager, ClaudeProcessManager>();
+		services.AddSingleton<ISelfUpdateService, SelfUpdateService>();
 		services.AddSingleton<SessionTreeViewModel>();
 		services.AddSingleton<MainWindowViewModel>();
 		services.AddTransient<SettingsViewModel>();
