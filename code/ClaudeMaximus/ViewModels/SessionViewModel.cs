@@ -19,6 +19,7 @@ public sealed class SessionViewModel : ViewModelBase
 	private readonly ISessionFileService _fileService;
 	private readonly IClaudeProcessManager _processManager;
 	private readonly IAppSettingsService _appSettings;
+	private readonly IDraftService _draftService;
 	private string _name;
 	private string _inputText = string.Empty;
 	private bool _isBusy;
@@ -34,7 +35,11 @@ public sealed class SessionViewModel : ViewModelBase
 	public string InputText
 	{
 		get => _inputText;
-		set => this.RaiseAndSetIfChanged(ref _inputText, value);
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _inputText, value);
+			SaveDraft(value);
+		}
 	}
 
 	public bool IsBusy
@@ -51,12 +56,14 @@ public sealed class SessionViewModel : ViewModelBase
 		SessionNodeViewModel node,
 		ISessionFileService fileService,
 		IClaudeProcessManager processManager,
-		IAppSettingsService appSettings)
+		IAppSettingsService appSettings,
+		IDraftService draftService)
 	{
 		_node           = node;
 		_fileService    = fileService;
 		_processManager = processManager;
 		_appSettings    = appSettings;
+		_draftService   = draftService;
 		_name           = node.Name;
 
 		node.WhenAnyValue(x => x.Name).Subscribe(n => Name = n);
@@ -69,7 +76,19 @@ public sealed class SessionViewModel : ViewModelBase
 	{
 		var entries = _fileService.ReadEntries(_node.FileName);
 		foreach (var entry in entries)
+		{
+			// Skip assistant/user/system entries with no content — they produce empty bubbles
+			if (entry.Role != Constants.SessionFile.RoleCompaction
+			    && string.IsNullOrWhiteSpace(entry.Content))
+				continue;
+
 			Messages.Add(EntryToViewModel(entry));
+		}
+
+		// Restore any unsent draft for this session
+		var draft = _draftService.LoadDraft(_node.FileName);
+		if (draft is not null)
+			_inputText = draft;   // set backing field directly to avoid re-saving on load
 	}
 
 	private async System.Threading.Tasks.Task SendAsync()
@@ -79,6 +98,7 @@ public sealed class SessionViewModel : ViewModelBase
 			return;
 
 		InputText = string.Empty;
+		_draftService.DeleteDraft(_node.FileName);
 		IncrementActive();
 
 		_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleUser, message);
@@ -109,13 +129,13 @@ public sealed class SessionViewModel : ViewModelBase
 		// File writes happen on the background thread (safe — append + flush)
 		switch (evt.Type)
 		{
-			case "assistant" when evt.Content is not null:
+			case "assistant" when !string.IsNullOrWhiteSpace(evt.Content):
 				_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleAssistant, evt.Content);
 				break;
 			case "system" when evt.Subtype is "compact":
 				_fileService.AppendCompactionSeparator(_node.FileName);
 				break;
-			case "system" when evt.IsError && evt.Content is not null:
+			case "system" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
 				_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, evt.Content);
 				break;
 			case "result" when evt.SessionId is not null:
@@ -129,7 +149,7 @@ public sealed class SessionViewModel : ViewModelBase
 		{
 			switch (evt.Type)
 			{
-				case "assistant" when evt.Content is not null:
+				case "assistant" when !string.IsNullOrWhiteSpace(evt.Content):
 					Messages.Add(new MessageEntryViewModel
 					{
 						Role      = Constants.SessionFile.RoleAssistant,
@@ -148,7 +168,7 @@ public sealed class SessionViewModel : ViewModelBase
 					break;
 
 				case "system" when evt.Subtype is "task_progress" or "task_started"
-				                   && evt.Content is not null:
+				                   && !string.IsNullOrWhiteSpace(evt.Content):
 					// Live progress: update the last progress entry in-place to avoid flooding
 					var last = Messages.Count > 0 ? Messages[^1] : null;
 					if (last?.Role == Constants.SessionFile.RoleSystem && last.IsProgress)
@@ -163,7 +183,7 @@ public sealed class SessionViewModel : ViewModelBase
 						});
 					break;
 
-				case "system" when evt.IsError && evt.Content is not null:
+				case "system" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
 					Messages.Add(new MessageEntryViewModel
 					{
 						Role      = Constants.SessionFile.RoleSystem,
@@ -171,8 +191,25 @@ public sealed class SessionViewModel : ViewModelBase
 						Timestamp = evt.Timestamp,
 					});
 					break;
+
+				case "result":
+					// Remove the temporary tool-progress bubble — the response is complete
+					for (var i = Messages.Count - 1; i >= 0; i--)
+					{
+						if (Messages[i].IsProgress)
+							Messages.RemoveAt(i);
+					}
+					break;
 			}
 		});
+	}
+
+	private void SaveDraft(string text)
+	{
+		if (string.IsNullOrEmpty(text))
+			_draftService.DeleteDraft(_node.FileName);
+		else
+			_draftService.SaveDraft(_node.FileName, text);
 	}
 
 	private void IncrementActive()

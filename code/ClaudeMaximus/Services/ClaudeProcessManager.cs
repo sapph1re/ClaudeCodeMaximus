@@ -242,16 +242,8 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 			if (!block.TryGetProperty("type", out var blockType))
 				continue;
 
-			switch (blockType.GetString())
-			{
-				case "text" when block.TryGetProperty("text", out var text):
-					sb.Append(text.GetString());
-					break;
-				case "tool_use" when block.TryGetProperty("name", out var name):
-					sb.AppendLine();
-					sb.AppendLine($"[Tool: {name.GetString()}]");
-					break;
-			}
+			if (blockType.GetString() == "text" && block.TryGetProperty("text", out var text))
+				sb.Append(text.GetString());
 		}
 
 		return sb.Length > 0 ? sb.ToString().TrimEnd() : null;
