@@ -1,20 +1,69 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:ClaudeMaximus.ViewModels"
+        xmlns:views="using:ClaudeMaximus.Views"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        mc:Ignorable="d"
         x:Class="ClaudeMaximus.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Icon="/Assets/avalonia-logo.ico"
-        Title="ClaudeMaximus">
+        Title="ClaudeMaximus"
+        Width="1400" Height="900"
+        MinWidth="800" MinHeight="500">
 
-    <Design.DataContext>
-        <!-- This only sets the DataContext for the previewer in an IDE,
-             to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
-        <vm:MainWindowViewModel/>
-    </Design.DataContext>
+    <DockPanel>
 
-    <TextBlock Text="ClaudeMaximus" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        <!-- Menu bar -->
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="_File">
+                <MenuItem Header="_Settings" Command="{Binding OpenSettingsCommand}"/>
+                <Separator/>
+                <MenuItem Header="E_xit" Command="{Binding ExitCommand}"/>
+            </MenuItem>
+        </Menu>
+
+        <!-- Two-panel splitter layout -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="280" MinWidth="180" MaxWidth="600"/>
+                <ColumnDefinition Width="5"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left panel: search + tree -->
+            <Border Grid.Column="0"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                    BorderThickness="0,0,1,0">
+                <views:SessionTreeView DataContext="{Binding SessionTree}"/>
+            </Border>
+
+            <!-- Resizable splitter -->
+            <GridSplitter Grid.Column="1"
+                          ResizeDirection="Columns"
+                          Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
+
+            <!-- Right panel -->
+            <Panel Grid.Column="2">
+                <!-- Placeholder when no session selected -->
+                <TextBlock Text="Select or create a session"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Opacity="0.4"
+                           FontSize="16"
+                           IsVisible="{Binding SessionTree.SelectedSession, Converter={x:Static ObjectConverters.IsNull}}"/>
+
+                <!-- Session view when a session is selected -->
+                <ContentControl Content="{Binding SessionTree.SelectedSession}"
+                                IsVisible="{Binding SessionTree.SelectedSession, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <ContentControl.DataTemplates>
+                        <DataTemplate DataType="vm:SessionNodeViewModel">
+                            <views:SessionView DataContext="{Binding}"/>
+                        </DataTemplate>
+                    </ContentControl.DataTemplates>
+                </ContentControl>
+            </Panel>
+
+        </Grid>
+    </DockPanel>
 
 </Window>

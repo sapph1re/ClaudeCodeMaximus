@@ -1,0 +1,65 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ClaudeMaximus.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             x:Class="ClaudeMaximus.Views.SessionTreeView"
+             x:DataType="vm:SessionTreeViewModel">
+
+    <DockPanel>
+
+        <!-- Search box -->
+        <Border DockPanel.Dock="Top" Padding="4">
+            <TextBox Text="{Binding SearchText}"
+                     Watermark="Search sessions..."
+                     x:Name="SearchBox"/>
+        </Border>
+
+        <!-- Add Directory button -->
+        <Button DockPanel.Dock="Bottom"
+                Content="+ Add Directory"
+                HorizontalAlignment="Stretch"
+                Margin="4"
+                Click="OnAddDirectoryClicked"/>
+
+        <!-- Tree -->
+        <TreeView ItemsSource="{Binding Directories}"
+                  SelectionChanged="OnTreeSelectionChanged">
+            <TreeView.DataTemplates>
+
+                <!-- Directory node -->
+                <TreeDataTemplate DataType="vm:DirectoryNodeViewModel"
+                                  ItemsSource="{Binding Children}">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="&#128193;" FontSize="12" VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding Label}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </TreeDataTemplate>
+
+                <!-- Group node -->
+                <TreeDataTemplate DataType="vm:GroupNodeViewModel"
+                                  ItemsSource="{Binding Children}">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="&#128194;" FontSize="12" VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </TreeDataTemplate>
+
+                <!-- Session node -->
+                <DataTemplate DataType="vm:SessionNodeViewModel">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <Ellipse Width="8" Height="8"
+                                 Fill="LimeGreen"
+                                 VerticalAlignment="Center"
+                                 IsVisible="{Binding IsRunning}"/>
+                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </DataTemplate>
+
+            </TreeView.DataTemplates>
+        </TreeView>
+
+    </DockPanel>
+
+</UserControl>

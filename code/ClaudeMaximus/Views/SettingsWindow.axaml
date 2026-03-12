@@ -1,0 +1,40 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:ClaudeMaximus.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        x:Class="ClaudeMaximus.Views.SettingsWindow"
+        x:DataType="vm:SettingsViewModel"
+        Title="Settings"
+        Width="500" Height="220"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+    <StackPanel Margin="16" Spacing="12">
+
+        <!-- Session files root -->
+        <StackPanel Spacing="4">
+            <TextBlock Text="Session Files Directory" FontWeight="SemiBold"/>
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBox Grid.Column="0" Text="{Binding SessionFilesRoot}" IsReadOnly="True"/>
+                <Button Grid.Column="1" Content="Browse..." Margin="4,0,0,0"
+                        Click="OnBrowseSessionRootClicked"/>
+            </Grid>
+        </StackPanel>
+
+        <!-- Claude executable path -->
+        <StackPanel Spacing="4">
+            <TextBlock Text="Claude CLI Path" FontWeight="SemiBold"/>
+            <TextBox Text="{Binding ClaudePath}" Watermark="claude (resolved from PATH)"/>
+        </StackPanel>
+
+        <!-- Save button -->
+        <Button Content="Save"
+                HorizontalAlignment="Right"
+                Command="{Binding SaveCommand}"
+                Click="OnSaveClicked"/>
+
+    </StackPanel>
+
+</Window>

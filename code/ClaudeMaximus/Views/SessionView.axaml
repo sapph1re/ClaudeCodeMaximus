@@ -1,0 +1,56 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ClaudeMaximus.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             x:Class="ClaudeMaximus.Views.SessionView"
+             x:DataType="vm:SessionNodeViewModel">
+
+    <DockPanel>
+
+        <!-- Session name header -->
+        <Border DockPanel.Dock="Top"
+                Padding="12,8"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                BorderThickness="0,0,0,1">
+            <TextBlock Text="{Binding Name}"
+                       FontSize="16"
+                       FontWeight="SemiBold"/>
+        </Border>
+
+        <!-- Input area at bottom -->
+        <Border DockPanel.Dock="Bottom"
+                Padding="8"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                BorderThickness="0,1,0,0">
+            <Grid RowDefinitions="*,Auto">
+                <TextBox Grid.Row="0"
+                         x:Name="InputBox"
+                         AcceptsReturn="True"
+                         MinHeight="80"
+                         MaxHeight="200"
+                         Watermark="Type a message... (Ctrl+Enter to send)"
+                         TextWrapping="Wrap"
+                         FontFamily="Cascadia Code,Consolas,monospace"/>
+                <Button Grid.Row="1"
+                        Content="Send"
+                        HorizontalAlignment="Right"
+                        Margin="0,4,0,0"
+                        Click="OnSendClicked"/>
+            </Grid>
+        </Border>
+
+        <!-- Message list -->
+        <ScrollViewer x:Name="MessageScroller"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <TextBlock Text="(Session messages will appear here)"
+                       Margin="12"
+                       Opacity="0.4"
+                       FontFamily="Cascadia Code,Consolas,monospace"/>
+        </ScrollViewer>
+
+    </DockPanel>
+
+</UserControl>
