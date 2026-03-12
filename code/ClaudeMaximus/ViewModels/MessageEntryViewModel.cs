@@ -23,6 +23,8 @@ public sealed class MessageEntryViewModel : ViewModelBase
 	/// <summary>True for live task_progress / task_started entries that are updated in-place.</summary>
 	public bool IsProgress { get; init; }
 
+	public string FormattedTime => Timestamp.LocalDateTime.ToString("HH:mm");
+
 	public bool IsUser       => Role == Constants.SessionFile.RoleUser;
 	public bool IsAssistant  => Role == Constants.SessionFile.RoleAssistant;
 	public bool IsSystem     => Role == Constants.SessionFile.RoleSystem;

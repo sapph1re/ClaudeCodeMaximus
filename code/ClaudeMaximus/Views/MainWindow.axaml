@@ -8,58 +8,104 @@
         x:Class="ClaudeMaximus.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="ClaudeMaximus"
+        Icon="avares://ClaudeMaximus/Assets/avalonia-logo.ico"
+        SystemDecorations="BorderOnly"
         Width="1400" Height="900"
         MinWidth="800" MinHeight="500">
 
-    <DockPanel>
+    <Panel>
 
-        <!-- Menu bar -->
-        <Menu DockPanel.Dock="Top">
-            <MenuItem Header="_File">
-                <MenuItem Header="_Settings" Command="{Binding OpenSettingsCommand}"/>
-                <Separator/>
-                <MenuItem Header="E_xit" Command="{Binding ExitCommand}"/>
-            </MenuItem>
-        </Menu>
+        <!-- Main content -->
+        <DockPanel>
 
-        <!-- Two-panel layout -->
-        <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="280" MinWidth="180" MaxWidth="600"/>
-                <ColumnDefinition Width="5"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
+            <!-- Menu bar — also serves as drag handle for the borderless window -->
+            <Menu DockPanel.Dock="Top" PointerPressed="OnMenuBarPointerPressed">
+                <MenuItem Header="_File">
+                    <MenuItem Header="_Settings" Command="{Binding OpenSettingsCommand}"/>
+                    <Separator/>
+                    <MenuItem Header="E_xit" Command="{Binding ExitCommand}"/>
+                </MenuItem>
+            </Menu>
 
-            <!-- Left panel -->
-            <Border Grid.Column="0"
+            <!-- Two-panel layout -->
+            <Grid x:Name="MainContentGrid">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="280" MinWidth="180" MaxWidth="600"/>
+                    <ColumnDefinition Width="5"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Left panel -->
+                <Border Grid.Column="0"
+                        BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                        BorderThickness="0,0,1,0">
+                    <views:SessionTreeView DataContext="{Binding SessionTree}"/>
+                </Border>
+
+                <GridSplitter Grid.Column="1"
+                              ResizeDirection="Columns"
+                              Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
+
+                <!-- Right panel -->
+                <Panel Grid.Column="2">
+                    <TextBlock Text="Select or create a session"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Opacity="0.4"
+                               FontSize="16"
+                               IsVisible="{Binding ActiveSession, Converter={x:Static ObjectConverters.IsNull}}"/>
+
+                    <ContentControl Content="{Binding ActiveSession}">
+                        <ContentControl.DataTemplates>
+                            <DataTemplate DataType="vm:SessionViewModel">
+                                <views:SessionView/>
+                            </DataTemplate>
+                        </ContentControl.DataTemplates>
+                    </ContentControl>
+                </Panel>
+
+            </Grid>
+        </DockPanel>
+
+        <!-- In-window modal overlay -->
+        <Panel x:Name="OverlayPanel" IsVisible="False" Background="#80000000">
+
+            <!-- Confirm dialog -->
+            <Border x:Name="ConfirmCard" IsVisible="False"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
                     BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
-                    BorderThickness="0,0,1,0">
-                <views:SessionTreeView DataContext="{Binding SessionTree}"/>
+                    BorderThickness="1" CornerRadius="8"
+                    Padding="24,20" Width="460" MaxWidth="600">
+                <StackPanel Spacing="16">
+                    <TextBlock x:Name="ConfirmMessage" TextWrapping="Wrap" FontSize="14"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                        <Button x:Name="ConfirmCancelBtn" Content="Cancel"/>
+                        <Button x:Name="ConfirmOkBtn"/>
+                    </StackPanel>
+                </StackPanel>
             </Border>
 
-            <GridSplitter Grid.Column="1"
-                          ResizeDirection="Columns"
-                          Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
+            <!-- Input dialog -->
+            <Border x:Name="InputCard" IsVisible="False"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                    BorderThickness="1" CornerRadius="8"
+                    Padding="24,20" Width="340">
+                <StackPanel Spacing="10">
+                    <TextBlock x:Name="InputCardTitle" FontWeight="SemiBold" FontSize="14"/>
+                    <TextBlock x:Name="InputCardPrompt" Opacity="0.7"/>
+                    <TextBox x:Name="InputCardBox"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                        <Button x:Name="InputCancelBtn" Content="Cancel"/>
+                        <Button x:Name="InputOkBtn" Content="OK"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
 
-            <!-- Right panel -->
-            <Panel Grid.Column="2">
-                <TextBlock Text="Select or create a session"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"
-                           Opacity="0.4"
-                           FontSize="16"
-                           IsVisible="{Binding ActiveSession, Converter={x:Static ObjectConverters.IsNull}}"/>
+        </Panel>
 
-                <ContentControl Content="{Binding ActiveSession}">
-                    <ContentControl.DataTemplates>
-                        <DataTemplate DataType="vm:SessionViewModel">
-                            <views:SessionView/>
-                        </DataTemplate>
-                    </ContentControl.DataTemplates>
-                </ContentControl>
-            </Panel>
-
-        </Grid>
-    </DockPanel>
+    </Panel>
 
 </Window>

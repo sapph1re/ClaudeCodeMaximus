@@ -109,11 +109,14 @@ public partial class SessionTreeView : UserControl
 		return null;
 	}
 
+	private static Task<string?> ShowInputAsync(Window? owner, string title, string prompt, string? initial = null)
+		=> (owner as MainWindow)?.ShowInputOverlayAsync(title, prompt, initial)
+		   ?? Task.FromResult<string?>(null);
+
 	private static async Task AddGroupToDirectoryAsync(
 		SessionTreeViewModel vm, DirectoryNodeViewModel dir, Window? owner)
 	{
-		if (owner == null) return;
-		var name = await InputDialog.ShowAsync(owner, "New Group", "Group name:");
+		var name = await ShowInputAsync(owner, "New Group", "Group name:");
 		if (!string.IsNullOrEmpty(name))
 			vm.AddGroup(dir, name);
 	}
@@ -121,8 +124,7 @@ public partial class SessionTreeView : UserControl
 	private static async Task AddSessionToDirectoryAsync(
 		SessionTreeViewModel vm, DirectoryNodeViewModel dir, Window? owner)
 	{
-		if (owner == null) return;
-		var name = await InputDialog.ShowAsync(owner, "New Session", "Session name:");
+		var name = await ShowInputAsync(owner, "New Session", "Session name:");
 		if (!string.IsNullOrEmpty(name))
 			vm.AddSession(dir, name);
 	}
@@ -130,8 +132,7 @@ public partial class SessionTreeView : UserControl
 	private static async Task AddGroupToGroupAsync(
 		SessionTreeViewModel vm, GroupNodeViewModel grp, Window? owner)
 	{
-		if (owner == null) return;
-		var name = await InputDialog.ShowAsync(owner, "New Group", "Group name:");
+		var name = await ShowInputAsync(owner, "New Group", "Group name:");
 		if (!string.IsNullOrEmpty(name))
 			vm.AddGroupToGroup(grp, name);
 	}
@@ -139,8 +140,7 @@ public partial class SessionTreeView : UserControl
 	private static async Task AddSessionToGroupAsync(
 		SessionTreeViewModel vm, GroupNodeViewModel grp, Window? owner)
 	{
-		if (owner == null) return;
-		var name = await InputDialog.ShowAsync(owner, "New Session", "Session name:");
+		var name = await ShowInputAsync(owner, "New Session", "Session name:");
 		if (!string.IsNullOrEmpty(name))
 			vm.AddSessionToGroup(grp, name);
 	}
@@ -148,8 +148,7 @@ public partial class SessionTreeView : UserControl
 	private static async Task RenameGroupAsync(
 		SessionTreeViewModel vm, GroupNodeViewModel grp, Window? owner)
 	{
-		if (owner == null) return;
-		var name = await InputDialog.ShowAsync(owner, "Rename Group", "New name:");
+		var name = await ShowInputAsync(owner, "Rename Group", "New name:", grp.Name);
 		if (!string.IsNullOrEmpty(name))
 			vm.RenameGroup(grp, name);
 	}
@@ -157,8 +156,7 @@ public partial class SessionTreeView : UserControl
 	private static async Task RenameSessionAsync(
 		SessionTreeViewModel vm, SessionNodeViewModel session, Window? owner)
 	{
-		if (owner == null) return;
-		var name = await InputDialog.ShowAsync(owner, "Rename Session", "New name:");
+		var name = await ShowInputAsync(owner, "Rename Session", "New name:", session.Name);
 		if (!string.IsNullOrEmpty(name))
 			vm.RenameSession(session, name);
 	}

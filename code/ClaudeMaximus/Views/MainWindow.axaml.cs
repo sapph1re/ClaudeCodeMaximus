@@ -1,9 +1,7 @@
-using System;
 using System.Threading.Tasks;
-using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Layout;
-using Avalonia.Media;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using ClaudeMaximus.ViewModels;
 
 namespace ClaudeMaximus.Views;
@@ -31,7 +29,10 @@ public partial class MainWindow : Window
 
 		e.Cancel = true;
 
-		var confirmed = await ShowCloseConfirmAsync(count);
+		var noun      = count == 1 ? "session is" : "sessions are";
+		var message   = $"There are {count} Claude Code {noun} currently active.\nAre you sure you want to terminate them and close?";
+		var confirmed = await ShowConfirmOverlayAsync(message, "Yes, close");
+
 		if (!confirmed) return;
 
 		vm.TerminateAllSessions();
@@ -39,51 +40,92 @@ public partial class MainWindow : Window
 		Close();
 	}
 
-	private async Task<bool> ShowCloseConfirmAsync(int count)
+	// ── Overlay: confirm dialog ───────────────────────────────────────────────
+
+	public async Task<bool> ShowConfirmOverlayAsync(string message, string okLabel = "OK")
 	{
-		var tcs    = new TaskCompletionSource<bool>();
-		var dialog = new Window
+		var tcs = new TaskCompletionSource<bool>();
+
+		ConfirmMessage.Text  = message;
+		ConfirmOkBtn.Content = okLabel;
+		ConfirmCard.IsVisible   = true;
+		OverlayPanel.IsVisible  = true;
+
+		void OnOk(object? s, RoutedEventArgs _)     => tcs.TrySetResult(true);
+		void OnCancel(object? s, RoutedEventArgs _)  => tcs.TrySetResult(false);
+		void OnKeyDown(object? s, KeyEventArgs e)
 		{
-			Title  = "Close ClaudeMaximus",
-			Width  = 440,
-			Height = 170,
-			WindowStartupLocation = WindowStartupLocation.CenterOwner,
-			CanResize = false,
-			ShowInTaskbar = false,
-		};
+			if (e.Key == Key.Escape) tcs.TrySetResult(false);
+		}
 
-		var noun = count == 1 ? "session is" : "sessions are";
-		var label = new TextBlock
+		ConfirmOkBtn.Click     += OnOk;
+		ConfirmCancelBtn.Click += OnCancel;
+		this.KeyDown           += OnKeyDown;
+
+		var result = await tcs.Task;
+
+		ConfirmOkBtn.Click     -= OnOk;
+		ConfirmCancelBtn.Click -= OnCancel;
+		this.KeyDown           -= OnKeyDown;
+
+		OverlayPanel.IsVisible = false;
+		ConfirmCard.IsVisible  = false;
+
+		return result;
+	}
+
+	// ── Overlay: input dialog ─────────────────────────────────────────────────
+
+	public async Task<string?> ShowInputOverlayAsync(string title, string prompt, string? initialValue = null)
+	{
+		var tcs = new TaskCompletionSource<string?>();
+
+		InputCardTitle.Text    = title;
+		InputCardPrompt.Text   = prompt;
+		InputCardBox.Text      = initialValue ?? string.Empty;
+		InputCard.IsVisible    = true;
+		OverlayPanel.IsVisible = true;
+		InputCardBox.Focus();
+		InputCardBox.SelectAll();
+
+		void Submit()
 		{
-			Text        = $"There are {count} Claude Code {noun} currently active.\nAre you sure you want to terminate them and close the application?",
-			TextWrapping = TextWrapping.Wrap,
-			Margin      = new Thickness(0, 0, 0, 16),
-		};
+			var text = InputCardBox.Text?.Trim();
+			if (!string.IsNullOrEmpty(text))
+				tcs.TrySetResult(text);
+		}
 
-		var cancelBtn = new Button { Content = "Cancel",     HorizontalAlignment = HorizontalAlignment.Left };
-		var closeBtn  = new Button { Content = "Yes, close", HorizontalAlignment = HorizontalAlignment.Right };
+		void OnOk(object? s, RoutedEventArgs _)    => Submit();
+		void OnCancel(object? s, RoutedEventArgs _) => tcs.TrySetResult(null);
+		void OnKeyDown(object? s, KeyEventArgs e)
+		{
+			if (e.Key == Key.Enter)  { e.Handled = true; Submit(); }
+			if (e.Key == Key.Escape) { e.Handled = true; tcs.TrySetResult(null); }
+		}
 
-		cancelBtn.Click += (_, _) => { tcs.TrySetResult(false); dialog.Close(); };
-		closeBtn.Click  += (_, _) => { tcs.TrySetResult(true);  dialog.Close(); };
+		InputOkBtn.Click     += OnOk;
+		InputCancelBtn.Click += OnCancel;
+		InputCardBox.KeyDown += OnKeyDown;
 
-		var buttons = new Grid();
-		buttons.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
-		buttons.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
-		buttons.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
-		Grid.SetColumn(cancelBtn, 0);
-		Grid.SetColumn(closeBtn,  2);
-		buttons.Children.Add(cancelBtn);
-		buttons.Children.Add(closeBtn);
+		var result = await tcs.Task;
 
-		var panel = new StackPanel { Margin = new Thickness(20), Spacing = 0 };
-		panel.Children.Add(label);
-		panel.Children.Add(buttons);
+		InputOkBtn.Click     -= OnOk;
+		InputCancelBtn.Click -= OnCancel;
+		InputCardBox.KeyDown -= OnKeyDown;
 
-		dialog.Content = panel;
-		dialog.Closed += (_, _) => tcs.TrySetResult(false);
+		OverlayPanel.IsVisible = false;
+		InputCard.IsVisible    = false;
 
-		await dialog.ShowDialog(this);
-		return tcs.Task.Result;
+		return result;
+	}
+
+	// ── Window drag via menu bar ──────────────────────────────────────────────
+
+	private void OnMenuBarPointerPressed(object? sender, PointerPressedEventArgs e)
+	{
+		if (e.Source is MenuItem) return;   // let menu items open normally
+		if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+			BeginMoveDrag(e);
 	}
 
 	protected override void OnClosed(System.EventArgs e)
