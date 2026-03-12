@@ -3,17 +3,22 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using ClaudeMaximus.ViewModels;
+using Serilog;
 
 namespace ClaudeMaximus.Views;
 
 /// <remarks>Created by Claude</remarks>
 public partial class SessionView : UserControl
 {
+	private static readonly ILogger _log = Log.ForContext<SessionView>();
+
 	public SessionView()
 	{
 		InitializeComponent();
 
-		InputBox.KeyDown += OnInputKeyDown;
+		// Use tunneling (Preview) so we capture Ctrl+Enter before the TextBox
+		// processes it as a newline (AcceptsReturn=True consumes Enter on bubble phase).
+		InputBox.AddHandler(KeyDownEvent, OnInputKeyDown, RoutingStrategies.Tunnel);
 
 		// Auto-scroll to bottom when new messages arrive
 		MessageList.Items.CollectionChanged += OnMessagesChanged;
@@ -35,6 +40,7 @@ public partial class SessionView : UserControl
 	{
 		if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.Control)
 		{
+			_log.Debug("Ctrl+Enter pressed — sending message");
 			e.Handled = true;
 			if (DataContext is SessionViewModel vm)
 				vm.SendCommand.Execute(default)

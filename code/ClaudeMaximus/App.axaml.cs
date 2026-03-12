@@ -5,7 +5,9 @@ using ClaudeMaximus.Services;
 using ClaudeMaximus.ViewModels;
 using ClaudeMaximus.Views;
 using Microsoft.Extensions.DependencyInjection;
+using Serilog;
 using System;
+using System.IO;
 
 namespace ClaudeMaximus;
 
@@ -20,6 +22,8 @@ public partial class App : Application
 
 	public override void OnFrameworkInitializationCompleted()
 	{
+		ConfigureLogging();
+
 		var services = new ServiceCollection();
 		ConfigureServices(services);
 		Services = services.BuildServiceProvider();
@@ -36,6 +40,27 @@ public partial class App : Application
 		}
 
 		base.OnFrameworkInitializationCompleted();
+	}
+
+	private static void ConfigureLogging()
+	{
+		var logDir = Path.Combine(
+			Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+			Constants.AppDataFolderName,
+			"logs");
+
+		Directory.CreateDirectory(logDir);
+
+		Log.Logger = new LoggerConfiguration()
+			.MinimumLevel.Debug()
+			.WriteTo.File(
+				Path.Combine(logDir, "log-.txt"),
+				rollingInterval: RollingInterval.Day,
+				retainedFileCountLimit: 7,
+				outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}")
+			.CreateLogger();
+
+		Log.Information("ClaudeMaximus starting up. Logs: {LogDir}", logDir);
 	}
 
 	private static void ConfigureServices(IServiceCollection services)

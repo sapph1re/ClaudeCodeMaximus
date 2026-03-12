@@ -6,12 +6,15 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClaudeMaximus.Models;
+using Serilog;
 
 namespace ClaudeMaximus.Services;
 
 /// <remarks>Created by Claude</remarks>
 public sealed class ClaudeProcessManager : IClaudeProcessManager
 {
+	private static readonly ILogger _log = Log.ForContext<ClaudeProcessManager>();
+
 	public async Task SendMessageAsync(
 		string workingDirectory,
 		string claudePath,
@@ -21,16 +24,23 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		CancellationToken cancellationToken = default)
 	{
 		var args = BuildArguments(sessionId);
+		_log.Debug("Attempting to spawn claude. Path={ClaudePath} Args={Args} WorkDir={WorkDir}",
+			claudePath, args, workingDirectory);
 
 		Process? process = TryStartProcess(claudePath, args, workingDirectory);
 
 		// On Windows, 'claude' is often a .cmd file which requires cmd.exe to launch
 		// when UseShellExecute=false. Retry via cmd.exe /c if direct spawn failed.
 		if (process == null && OperatingSystem.IsWindows())
-			process = TryStartProcess("cmd.exe", $"/c \"{claudePath}\" {args}", workingDirectory);
+		{
+			var cmdArgs = $"/c \"{claudePath}\" {args}";
+			_log.Debug("Direct spawn failed — retrying via cmd.exe /c. Args={CmdArgs}", cmdArgs);
+			process = TryStartProcess("cmd.exe", cmdArgs, workingDirectory);
+		}
 
 		if (process == null)
 		{
+			_log.Error("Failed to start claude process. Path={ClaudePath}", claudePath);
 			onEvent(new ClaudeStreamEvent
 			{
 				Type    = "system",
@@ -41,8 +51,11 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 			return;
 		}
 
+		_log.Debug("Claude process started. PID={Pid}", process.Id);
+
 		using (process)
 		{
+			_log.Debug("Writing user message to stdin ({Length} chars)", userMessage.Length);
 			await process.StandardInput.WriteLineAsync(userMessage);
 			process.StandardInput.Close();
 
@@ -52,17 +65,21 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 				if (string.IsNullOrWhiteSpace(line))
 					continue;
 
+				_log.Debug("stdout: {Line}", line);
+
 				var evt = TryParseEvent(line);
 				if (evt != null)
 					onEvent(evt);
 			}
 
 			await process.WaitForExitAsync(cancellationToken);
+			_log.Debug("Claude process exited. Code={ExitCode}", process.ExitCode);
 
-			if (process.ExitCode != 0)
+			var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
+			if (!string.IsNullOrWhiteSpace(stderr))
 			{
-				var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
-				if (!string.IsNullOrWhiteSpace(stderr))
+				_log.Warning("stderr: {Stderr}", stderr.Trim());
+				if (process.ExitCode != 0)
 				{
 					onEvent(new ClaudeStreamEvent
 					{
@@ -101,12 +118,16 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 			StandardErrorEncoding  = Encoding.UTF8,
 		};
 
+		// Remove CLAUDECODE so claude doesn't refuse to run inside another claude session.
+		psi.Environment.Remove("CLAUDECODE");
+
 		try
 		{
 			return Process.Start(psi);
 		}
-		catch (Win32Exception)
+		catch (Win32Exception ex)
 		{
+			_log.Warning("Win32Exception starting {FileName}: {Message}", fileName, ex.Message);
 			return null;
 		}
 	}
