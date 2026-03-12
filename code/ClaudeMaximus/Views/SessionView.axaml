@@ -33,7 +33,6 @@
                          MaxHeight="200"
                          Watermark="Type a message… (Ctrl+Enter to send)"
                          TextWrapping="Wrap"
-                         IsEnabled="{Binding IsBusy, Converter={x:Static BoolConverters.Not}}"
                          FontFamily="Cascadia Code,Consolas,monospace"/>
                 <StackPanel Grid.Row="1"
                             Orientation="Horizontal"
@@ -45,8 +44,7 @@
                                Opacity="0.6"
                                IsVisible="{Binding IsBusy}"/>
                     <Button Content="Send"
-                            Command="{Binding SendCommand}"
-                            IsEnabled="{Binding IsBusy, Converter={x:Static BoolConverters.Not}}"/>
+                            Command="{Binding SendCommand}"/>
                 </StackPanel>
             </Grid>
         </Border>

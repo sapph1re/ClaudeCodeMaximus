@@ -6,12 +6,15 @@ using Avalonia.Threading;
 using ClaudeMaximus.Models;
 using ClaudeMaximus.Services;
 using ReactiveUI;
+using Serilog;
 
 namespace ClaudeMaximus.ViewModels;
 
 /// <remarks>Created by Claude</remarks>
 public sealed class SessionViewModel : ViewModelBase
 {
+	private static readonly ILogger _log = Log.ForContext<SessionViewModel>();
+
 	private readonly SessionNodeViewModel _node;
 	private readonly ISessionFileService _fileService;
 	private readonly IClaudeProcessManager _processManager;
@@ -19,7 +22,8 @@ public sealed class SessionViewModel : ViewModelBase
 	private string _name;
 	private string _inputText = string.Empty;
 	private bool _isBusy;
-	private CancellationTokenSource? _cts;
+	// Counts concurrent in-flight sends; IsBusy = count > 0
+	private int _activeCount;
 
 	public string Name
 	{
@@ -49,16 +53,16 @@ public sealed class SessionViewModel : ViewModelBase
 		IClaudeProcessManager processManager,
 		IAppSettingsService appSettings)
 	{
-		_node         = node;
-		_fileService  = fileService;
+		_node           = node;
+		_fileService    = fileService;
 		_processManager = processManager;
-		_appSettings  = appSettings;
-		_name         = node.Name;
+		_appSettings    = appSettings;
+		_name           = node.Name;
 
 		node.WhenAnyValue(x => x.Name).Subscribe(n => Name = n);
 
-		var canSend = this.WhenAnyValue(x => x.IsBusy, busy => !busy);
-		SendCommand = ReactiveCommand.CreateFromTask(SendAsync, canSend);
+		// No canSend gate — allow sending at any time, even while a response is in flight
+		SendCommand = ReactiveCommand.CreateFromTask(SendAsync);
 	}
 
 	public void LoadFromFile()
@@ -75,17 +79,15 @@ public sealed class SessionViewModel : ViewModelBase
 			return;
 
 		InputText = string.Empty;
-		SetBusy(true);
+		IncrementActive();
 
 		_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleUser, message);
-		Messages.Add(new MessageEntryViewModel
+		Dispatcher.UIThread.Post(() => Messages.Add(new MessageEntryViewModel
 		{
 			Role      = Constants.SessionFile.RoleUser,
 			Content   = message,
 			Timestamp = DateTimeOffset.UtcNow,
-		});
-
-		_cts = new CancellationTokenSource();
+		}));
 
 		try
 		{
@@ -94,14 +96,11 @@ public sealed class SessionViewModel : ViewModelBase
 				claudePath:       _appSettings.Settings.ClaudePath,
 				sessionId:        _node.Model.ClaudeSessionId,
 				userMessage:      message,
-				onEvent:          HandleStreamEvent,
-				cancellationToken: _cts.Token);
+				onEvent:          HandleStreamEvent);
 		}
 		finally
 		{
-			_cts.Dispose();
-			_cts = null;
-			SetBusy(false);
+			DecrementActive();
 		}
 	}
 
@@ -160,13 +159,19 @@ public sealed class SessionViewModel : ViewModelBase
 		});
 	}
 
-	private void SetBusy(bool busy)
+	private void IncrementActive()
 	{
-		Dispatcher.UIThread.Post(() =>
-		{
-			IsBusy           = busy;
-			_node.IsRunning  = busy;
-		});
+		var count = Interlocked.Increment(ref _activeCount);
+		_log.Debug("Active sends: {Count}", count);
+		Dispatcher.UIThread.Post(() => { IsBusy = true; _node.IsRunning = true; });
+	}
+
+	private void DecrementActive()
+	{
+		var count = Interlocked.Decrement(ref _activeCount);
+		_log.Debug("Active sends: {Count}", count);
+		if (count <= 0)
+			Dispatcher.UIThread.Post(() => { IsBusy = false; _node.IsRunning = false; });
 	}
 
 	private static MessageEntryViewModel EntryToViewModel(SessionEntryModel entry)

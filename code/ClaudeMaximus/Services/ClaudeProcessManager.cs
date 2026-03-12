@@ -95,9 +95,9 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 
 	private static string BuildArguments(string? sessionId)
 	{
-		// -p (--print) forces non-interactive single-prompt mode;
-		// without it, claude starts an interactive REPL and ignores piped stdin.
-		var args = "--output-format stream-json -p";
+		// -p (--print) forces non-interactive single-prompt mode.
+		// --verbose is required by claude when combining --print with stream-json output.
+		var args = "--output-format stream-json --verbose -p";
 		if (!string.IsNullOrEmpty(sessionId))
 			args += $" --resume {sessionId}";
 		return args;
