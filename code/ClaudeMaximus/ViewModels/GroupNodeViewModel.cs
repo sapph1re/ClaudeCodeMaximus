@@ -11,6 +11,8 @@ public sealed class GroupNodeViewModel : ViewModelBase
 
 	public GroupNodeModel Model { get; }
 
+	public string WorkingDirectory => Model.WorkingDirectory;
+
 	public string Name
 	{
 		get => _name;

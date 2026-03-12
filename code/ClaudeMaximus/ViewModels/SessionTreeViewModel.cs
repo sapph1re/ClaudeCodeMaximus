@@ -69,7 +69,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 	public GroupNodeViewModel AddGroup(DirectoryNodeViewModel parent, string name)
 	{
-		var model = new GroupNodeModel { Name = name };
+		var model = new GroupNodeModel { Name = name, WorkingDirectory = parent.Path };
 		var vm = new GroupNodeViewModel(model);
 		parent.AddGroup(vm);
 		_appSettings.Save();
@@ -78,7 +78,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 
 	public GroupNodeViewModel AddGroupToGroup(GroupNodeViewModel parent, string name)
 	{
-		var model = new GroupNodeModel { Name = name };
+		var model = new GroupNodeModel { Name = name, WorkingDirectory = parent.WorkingDirectory };
 		var vm = new GroupNodeViewModel(model);
 		parent.AddGroup(vm);
 		_appSettings.Save();
@@ -88,7 +88,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	public SessionNodeViewModel AddSession(DirectoryNodeViewModel parent, string name)
 	{
 		var fileName = _sessionFileService.CreateSessionFile();
-		var model = new SessionNodeModel { Name = name, FileName = fileName };
+		var model = new SessionNodeModel { Name = name, FileName = fileName, WorkingDirectory = parent.Path };
 		var vm = new SessionNodeViewModel(model);
 		parent.AddSession(vm);
 		_appSettings.Save();
@@ -98,7 +98,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	public SessionNodeViewModel AddSessionToGroup(GroupNodeViewModel parent, string name)
 	{
 		var fileName = _sessionFileService.CreateSessionFile();
-		var model = new SessionNodeModel { Name = name, FileName = fileName };
+		var model = new SessionNodeModel { Name = name, FileName = fileName, WorkingDirectory = parent.WorkingDirectory };
 		var vm = new SessionNodeViewModel(model);
 		parent.AddSession(vm);
 		_appSettings.Save();

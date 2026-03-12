@@ -5,7 +5,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
              x:Class="ClaudeMaximus.Views.SessionView"
-             x:DataType="vm:SessionNodeViewModel">
+             x:DataType="vm:SessionViewModel">
 
     <DockPanel>
 
@@ -19,7 +19,7 @@
                        FontWeight="SemiBold"/>
         </Border>
 
-        <!-- Input area at bottom -->
+        <!-- Input area -->
         <Border DockPanel.Dock="Bottom"
                 Padding="8"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
@@ -27,17 +27,27 @@
             <Grid RowDefinitions="*,Auto">
                 <TextBox Grid.Row="0"
                          x:Name="InputBox"
+                         Text="{Binding InputText}"
                          AcceptsReturn="True"
                          MinHeight="80"
                          MaxHeight="200"
-                         Watermark="Type a message... (Ctrl+Enter to send)"
+                         Watermark="Type a message… (Ctrl+Enter to send)"
                          TextWrapping="Wrap"
+                         IsEnabled="{Binding IsBusy, Converter={x:Static BoolConverters.Not}}"
                          FontFamily="Cascadia Code,Consolas,monospace"/>
-                <Button Grid.Row="1"
-                        Content="Send"
-                        HorizontalAlignment="Right"
-                        Margin="0,4,0,0"
-                        Click="OnSendClicked"/>
+                <StackPanel Grid.Row="1"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            Spacing="8"
+                            Margin="0,4,0,0">
+                    <TextBlock Text="Claude is thinking…"
+                               VerticalAlignment="Center"
+                               Opacity="0.6"
+                               IsVisible="{Binding IsBusy}"/>
+                    <Button Content="Send"
+                            Command="{Binding SendCommand}"
+                            IsEnabled="{Binding IsBusy, Converter={x:Static BoolConverters.Not}}"/>
+                </StackPanel>
             </Grid>
         </Border>
 
@@ -45,10 +55,84 @@
         <ScrollViewer x:Name="MessageScroller"
                       HorizontalScrollBarVisibility="Disabled"
                       VerticalScrollBarVisibility="Auto">
-            <TextBlock Text="(Session messages will appear here)"
-                       Margin="12"
-                       Opacity="0.4"
-                       FontFamily="Cascadia Code,Consolas,monospace"/>
+            <ItemsControl x:Name="MessageList"
+                          ItemsSource="{Binding Messages}"
+                          Margin="0,4,0,4">
+                <ItemsControl.DataTemplates>
+
+                    <!-- User message -->
+                    <DataTemplate x:DataType="vm:MessageEntryViewModel">
+                        <Border IsVisible="{Binding IsUser}"
+                                Margin="60,4,8,4"
+                                Padding="10,7"
+                                CornerRadius="8"
+                                Background="#1E3A5F">
+                            <StackPanel>
+                                <TextBlock Text="You"
+                                           FontSize="11"
+                                           Opacity="0.6"
+                                           Margin="0,0,0,3"/>
+                                <SelectableTextBlock Text="{Binding Content}"
+                                                     TextWrapping="Wrap"
+                                                     FontFamily="Cascadia Code,Consolas,monospace"
+                                                     FontSize="13"/>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+
+                    <!-- Assistant message -->
+                    <DataTemplate x:DataType="vm:MessageEntryViewModel">
+                        <Border IsVisible="{Binding IsAssistant}"
+                                Margin="8,4,60,4"
+                                Padding="10,7"
+                                CornerRadius="8"
+                                Background="#1A2A1A">
+                            <StackPanel>
+                                <TextBlock Text="Claude"
+                                           FontSize="11"
+                                           Opacity="0.6"
+                                           Margin="0,0,0,3"/>
+                                <SelectableTextBlock Text="{Binding Content}"
+                                                     TextWrapping="Wrap"
+                                                     FontFamily="Cascadia Code,Consolas,monospace"
+                                                     FontSize="13"/>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+
+                    <!-- System message -->
+                    <DataTemplate x:DataType="vm:MessageEntryViewModel">
+                        <Border IsVisible="{Binding IsSystem}"
+                                Margin="20,4,20,4"
+                                Padding="8,5"
+                                CornerRadius="4"
+                                Background="#2A2A2A">
+                            <SelectableTextBlock Text="{Binding Content}"
+                                                 TextWrapping="Wrap"
+                                                 FontSize="12"
+                                                 Opacity="0.7"
+                                                 FontStyle="Italic"/>
+                        </Border>
+                    </DataTemplate>
+
+                    <!-- Compaction separator -->
+                    <DataTemplate x:DataType="vm:MessageEntryViewModel">
+                        <StackPanel IsVisible="{Binding IsCompaction}"
+                                    Margin="8,8,8,8"
+                                    Orientation="Vertical"
+                                    Spacing="2">
+                            <Separator/>
+                            <TextBlock Text="― Context compacted above ―"
+                                       HorizontalAlignment="Center"
+                                       FontSize="11"
+                                       Opacity="0.5"
+                                       FontStyle="Italic"/>
+                            <Separator/>
+                        </StackPanel>
+                    </DataTemplate>
+
+                </ItemsControl.DataTemplates>
+            </ItemsControl>
         </ScrollViewer>
 
     </DockPanel>

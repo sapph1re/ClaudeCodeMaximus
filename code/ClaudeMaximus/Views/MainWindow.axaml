@@ -22,7 +22,7 @@
             </MenuItem>
         </Menu>
 
-        <!-- Two-panel splitter layout -->
+        <!-- Two-panel layout -->
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="280" MinWidth="180" MaxWidth="600"/>
@@ -30,37 +30,28 @@
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Left panel: search + tree -->
+            <!-- Left panel -->
             <Border Grid.Column="0"
                     BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
                     BorderThickness="0,0,1,0">
                 <views:SessionTreeView DataContext="{Binding SessionTree}"/>
             </Border>
 
-            <!-- Resizable splitter -->
             <GridSplitter Grid.Column="1"
                           ResizeDirection="Columns"
                           Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
 
             <!-- Right panel -->
             <Panel Grid.Column="2">
-                <!-- Placeholder when no session selected -->
                 <TextBlock Text="Select or create a session"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
                            Opacity="0.4"
                            FontSize="16"
-                           IsVisible="{Binding SessionTree.SelectedSession, Converter={x:Static ObjectConverters.IsNull}}"/>
+                           IsVisible="{Binding ActiveSession, Converter={x:Static ObjectConverters.IsNull}}"/>
 
-                <!-- Session view when a session is selected -->
-                <ContentControl Content="{Binding SessionTree.SelectedSession}"
-                                IsVisible="{Binding SessionTree.SelectedSession, Converter={x:Static ObjectConverters.IsNotNull}}">
-                    <ContentControl.DataTemplates>
-                        <DataTemplate DataType="vm:SessionNodeViewModel">
-                            <views:SessionView DataContext="{Binding}"/>
-                        </DataTemplate>
-                    </ContentControl.DataTemplates>
-                </ContentControl>
+                <views:SessionView x:Name="SessionViewPanel"
+                                   IsVisible="{Binding ActiveSession, Converter={x:Static ObjectConverters.IsNotNull}}"/>
             </Panel>
 
         </Grid>

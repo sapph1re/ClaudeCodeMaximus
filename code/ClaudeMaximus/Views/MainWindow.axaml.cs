@@ -1,6 +1,7 @@
-using Avalonia;
+using System;
 using Avalonia.Controls;
 using ClaudeMaximus.ViewModels;
+using ReactiveUI;
 
 namespace ClaudeMaximus.Views;
 
@@ -12,6 +13,18 @@ public partial class MainWindow : Window
 		InitializeComponent();
 	}
 
+	protected override void OnDataContextChanged(System.EventArgs e)
+	{
+		base.OnDataContextChanged(e);
+
+		if (DataContext is MainWindowViewModel vm)
+		{
+			// Wire ActiveSession changes to SessionView's DataContext
+			vm.WhenAnyValue(x => x.ActiveSession)
+				.Subscribe(session => SessionViewPanel.DataContext = session);
+		}
+	}
+
 	protected override void OnClosed(System.EventArgs e)
 	{
 		if (DataContext is MainWindowViewModel vm)
@@ -21,10 +34,10 @@ public partial class MainWindow : Window
 
 			if (settings != null)
 			{
-				settings.Settings.Window.Width = Width;
-				settings.Settings.Window.Height = Height;
-				settings.Settings.Window.Left = Position.X;
-				settings.Settings.Window.Top = Position.Y;
+				settings.Settings.Window.Width    = Width;
+				settings.Settings.Window.Height   = Height;
+				settings.Settings.Window.Left     = Position.X;
+				settings.Settings.Window.Top      = Position.Y;
 				settings.Settings.Window.SplitterPosition = vm.SplitterPosition;
 				settings.Save();
 			}

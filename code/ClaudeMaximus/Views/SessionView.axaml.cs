@@ -1,6 +1,8 @@
+using System.Collections.Specialized;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using ClaudeMaximus.ViewModels;
 
 namespace ClaudeMaximus.Views;
 
@@ -12,6 +14,21 @@ public partial class SessionView : UserControl
 		InitializeComponent();
 
 		InputBox.KeyDown += OnInputKeyDown;
+
+		// Auto-scroll to bottom when new messages arrive
+		MessageList.Items.CollectionChanged += OnMessagesChanged;
+	}
+
+	protected override void OnDataContextChanged(System.EventArgs e)
+	{
+		base.OnDataContextChanged(e);
+
+		if (DataContext is SessionViewModel vm)
+		{
+			// Re-subscribe auto-scroll to the new Messages collection
+			MessageList.Items.CollectionChanged -= OnMessagesChanged;
+			vm.Messages.CollectionChanged += OnMessagesChanged;
+		}
 	}
 
 	private void OnInputKeyDown(object? sender, KeyEventArgs e)
@@ -19,20 +36,15 @@ public partial class SessionView : UserControl
 		if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.Control)
 		{
 			e.Handled = true;
-			SendCurrentInput();
+			if (DataContext is SessionViewModel vm)
+				vm.SendCommand.Execute(default)
+					.Subscribe(new System.Reactive.AnonymousObserver<System.Reactive.Unit>(_ => { }, _ => { }, () => { }));
 		}
 	}
 
-	private void OnSendClicked(object? sender, RoutedEventArgs e)
-		=> SendCurrentInput();
-
-	private void SendCurrentInput()
+	private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
 	{
-		var text = InputBox.Text?.Trim();
-		if (string.IsNullOrEmpty(text))
-			return;
-
-		InputBox.Text = string.Empty;
-		// TODO Phase 3: forward to ClaudeProcessManager
+		if (e.Action == NotifyCollectionChangedAction.Add)
+			MessageScroller.ScrollToEnd();
 	}
 }
