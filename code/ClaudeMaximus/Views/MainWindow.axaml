@@ -50,8 +50,13 @@
                            FontSize="16"
                            IsVisible="{Binding ActiveSession, Converter={x:Static ObjectConverters.IsNull}}"/>
 
-                <views:SessionView x:Name="SessionViewPanel"
-                                   IsVisible="{Binding ActiveSession, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+                <ContentControl Content="{Binding ActiveSession}">
+                    <ContentControl.DataTemplates>
+                        <DataTemplate DataType="vm:SessionViewModel">
+                            <views:SessionView/>
+                        </DataTemplate>
+                    </ContentControl.DataTemplates>
+                </ContentControl>
             </Panel>
 
         </Grid>

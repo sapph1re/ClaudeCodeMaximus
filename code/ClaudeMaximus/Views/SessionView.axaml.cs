@@ -1,7 +1,9 @@
 using System.Collections.Specialized;
+using System.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using ClaudeMaximus.ViewModels;
 using Serilog;
 

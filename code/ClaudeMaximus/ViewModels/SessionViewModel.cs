@@ -1,7 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Reactive;
-using System.Threading;
 using Avalonia.Threading;
 using ClaudeMaximus.Models;
 using ClaudeMaximus.Services;
@@ -23,8 +22,6 @@ public sealed class SessionViewModel : ViewModelBase
 	private string _name;
 	private string _inputText = string.Empty;
 	private bool _isBusy;
-	// Counts concurrent in-flight sends; IsBusy = count > 0
-	private int _activeCount;
 
 	public string Name
 	{
@@ -97,17 +94,29 @@ public sealed class SessionViewModel : ViewModelBase
 		if (string.IsNullOrEmpty(message))
 			return;
 
+		// Everything before the first await runs synchronously on the UI thread.
 		InputText = string.Empty;
 		_draftService.DeleteDraft(_node.FileName);
-		IncrementActive();
+
+		IsBusy = true;
+		_node.IsRunning = true;
 
 		_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleUser, message);
-		Dispatcher.UIThread.Post(() => Messages.Add(new MessageEntryViewModel
+		Messages.Add(new MessageEntryViewModel
 		{
 			Role      = Constants.SessionFile.RoleUser,
 			Content   = message,
 			Timestamp = DateTimeOffset.UtcNow,
-		}));
+		});
+
+		// Visible thinking placeholder — updated in-place by task_progress events, removed on result.
+		Messages.Add(new MessageEntryViewModel
+		{
+			Role       = Constants.SessionFile.RoleSystem,
+			Content    = "Claude is thinking…",
+			Timestamp  = DateTimeOffset.UtcNow,
+			IsProgress = true,
+		});
 
 		try
 		{
@@ -120,7 +129,9 @@ public sealed class SessionViewModel : ViewModelBase
 		}
 		finally
 		{
-			DecrementActive();
+			// Continuation also runs on UI thread via SynchronizationContext.
+			IsBusy = false;
+			_node.IsRunning = false;
 		}
 	}
 
@@ -210,21 +221,6 @@ public sealed class SessionViewModel : ViewModelBase
 			_draftService.DeleteDraft(_node.FileName);
 		else
 			_draftService.SaveDraft(_node.FileName, text);
-	}
-
-	private void IncrementActive()
-	{
-		var count = Interlocked.Increment(ref _activeCount);
-		_log.Debug("Active sends: {Count}", count);
-		Dispatcher.UIThread.Post(() => { IsBusy = true; _node.IsRunning = true; });
-	}
-
-	private void DecrementActive()
-	{
-		var count = Interlocked.Decrement(ref _activeCount);
-		_log.Debug("Active sends: {Count}", count);
-		if (count <= 0)
-			Dispatcher.UIThread.Post(() => { IsBusy = false; _node.IsRunning = false; });
 	}
 
 	private static MessageEntryViewModel EntryToViewModel(SessionEntryModel entry)

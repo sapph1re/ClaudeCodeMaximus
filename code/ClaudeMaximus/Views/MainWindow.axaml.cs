@@ -5,7 +5,6 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using ClaudeMaximus.ViewModels;
-using ReactiveUI;
 
 namespace ClaudeMaximus.Views;
 
@@ -85,18 +84,6 @@ public partial class MainWindow : Window
 
 		await dialog.ShowDialog(this);
 		return tcs.Task.Result;
-	}
-
-	protected override void OnDataContextChanged(System.EventArgs e)
-	{
-		base.OnDataContextChanged(e);
-
-		if (DataContext is MainWindowViewModel vm)
-		{
-			// Wire ActiveSession changes to SessionView's DataContext
-			vm.WhenAnyValue(x => x.ActiveSession)
-				.Subscribe(session => SessionViewPanel.DataContext = session);
-		}
 	}
 
 	protected override void OnClosed(System.EventArgs e)
