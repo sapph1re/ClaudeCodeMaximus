@@ -22,33 +22,21 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 	{
 		var args = BuildArguments(sessionId);
 
-		var psi = new ProcessStartInfo(claudePath, args)
-		{
-			WorkingDirectory = workingDirectory,
-			RedirectStandardInput  = true,
-			RedirectStandardOutput = true,
-			RedirectStandardError  = true,
-			UseShellExecute  = false,
-			CreateNoWindow   = true,
-			StandardInputEncoding  = Encoding.UTF8,
-			StandardOutputEncoding = Encoding.UTF8,
-			StandardErrorEncoding  = Encoding.UTF8,
-		};
+		Process? process = TryStartProcess(claudePath, args, workingDirectory);
 
-		Process process;
-		try
-		{
-			process = Process.Start(psi)
-				?? throw new InvalidOperationException("Failed to start claude process.");
-		}
-		catch (Win32Exception ex)
+		// On Windows, 'claude' is often a .cmd file which requires cmd.exe to launch
+		// when UseShellExecute=false. Retry via cmd.exe /c if direct spawn failed.
+		if (process == null && OperatingSystem.IsWindows())
+			process = TryStartProcess("cmd.exe", $"/c \"{claudePath}\" {args}", workingDirectory);
+
+		if (process == null)
 		{
 			onEvent(new ClaudeStreamEvent
 			{
-				Type     = "system",
-				Subtype  = "error",
-				Content  = $"Could not launch claude: {ex.Message}. Check the claude path in Settings.",
-				IsError  = true,
+				Type    = "system",
+				Subtype = "error",
+				Content = $"Could not launch claude at '{claudePath}'. Check the claude path in Settings.",
+				IsError = true,
 			});
 			return;
 		}
@@ -90,10 +78,37 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 
 	private static string BuildArguments(string? sessionId)
 	{
-		var args = "--output-format stream-json";
+		// -p (--print) forces non-interactive single-prompt mode;
+		// without it, claude starts an interactive REPL and ignores piped stdin.
+		var args = "--output-format stream-json -p";
 		if (!string.IsNullOrEmpty(sessionId))
 			args += $" --resume {sessionId}";
 		return args;
+	}
+
+	private static Process? TryStartProcess(string fileName, string arguments, string workingDirectory)
+	{
+		var psi = new ProcessStartInfo(fileName, arguments)
+		{
+			WorkingDirectory       = workingDirectory,
+			RedirectStandardInput  = true,
+			RedirectStandardOutput = true,
+			RedirectStandardError  = true,
+			UseShellExecute        = false,
+			CreateNoWindow         = true,
+			StandardInputEncoding  = Encoding.UTF8,
+			StandardOutputEncoding = Encoding.UTF8,
+			StandardErrorEncoding  = Encoding.UTF8,
+		};
+
+		try
+		{
+			return Process.Start(psi);
+		}
+		catch (Win32Exception)
+		{
+			return null;
+		}
 	}
 
 	private static ClaudeStreamEvent? TryParseEvent(string line)
