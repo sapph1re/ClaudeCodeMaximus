@@ -38,13 +38,25 @@ public partial class SessionView : UserControl
 
 	private void OnInputKeyDown(object? sender, KeyEventArgs e)
 	{
-		if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.Control)
+		if (e.Key != Key.Enter) return;
+
+		if (e.KeyModifiers == KeyModifiers.Control)
 		{
 			_log.Debug("Ctrl+Enter pressed — sending message");
 			e.Handled = true;
 			if (DataContext is SessionViewModel vm)
 				vm.SendCommand.Execute(default)
 					.Subscribe(new System.Reactive.AnonymousObserver<System.Reactive.Unit>(_ => { }, _ => { }, () => { }));
+		}
+		else if (e.KeyModifiers == KeyModifiers.None && sender is TextBox tb)
+		{
+			// On Windows, Avalonia inserts \r\n for Enter, requiring two backspaces to undo.
+			// Intercept and insert \n only so one backspace removes the newline.
+			e.Handled = true;
+			var pos  = tb.CaretIndex;
+			var text = tb.Text ?? string.Empty;
+			tb.Text       = text.Insert(pos, "\n");
+			tb.CaretIndex = pos + 1;
 		}
 	}
 
