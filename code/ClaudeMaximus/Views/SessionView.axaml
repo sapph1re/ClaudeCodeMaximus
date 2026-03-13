@@ -41,7 +41,7 @@
                             <!-- User message: timestamp left, bubble right -->
                             <Grid IsVisible="{Binding IsUser}" Margin="0,4,8,4">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="52"/>
+                                    <ColumnDefinition Width="62"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0"
