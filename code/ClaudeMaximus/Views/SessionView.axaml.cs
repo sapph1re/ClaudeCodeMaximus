@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -20,6 +21,11 @@ public partial class SessionView : UserControl
 	private SessionViewModel? _subscribedVm;
 	private readonly AutocompleteTriggerParser _triggerParser = new();
 	private DispatcherTimer? _autocompleteDebounce;
+	private bool _isAtBottom = true;
+	private MessageEntryViewModel? _subscribedProgressMsg;
+
+	/// <summary>Threshold in pixels — if within this distance of the bottom, consider "at bottom".</summary>
+	private const double AtBottomThreshold = 30;
 
 	public SessionView()
 	{
@@ -30,6 +36,9 @@ public partial class SessionView : UserControl
 
 		// Text/caret change → trigger detection
 		InputBox.PropertyChanged += OnInputBoxPropertyChanged;
+
+		// Track whether user is at the bottom of the scroller for auto-scroll
+		MessageScroller.ScrollChanged += OnScrollChanged;
 
 		// Ctrl+scroll changes font size; tunnel so we intercept before the scroller scrolls
 		MessageScroller.AddHandler(InputElement.PointerWheelChangedEvent, OnScrollerWheel, RoutingStrategies.Tunnel);
@@ -45,6 +54,7 @@ public partial class SessionView : UserControl
 		{
 			_subscribedVm.ScrollOffset = MessageScroller.Offset.Y;
 			_subscribedVm.Messages.CollectionChanged -= OnMessagesChanged;
+			UnsubscribeProgressMessage();
 		}
 
 		_subscribedVm = DataContext as SessionViewModel;
@@ -169,8 +179,53 @@ public partial class SessionView : UserControl
 		vm.AutocompleteVm.UpdateSuggestions(vm.WorkingDirectory, trigger);
 	}
 
-	// No-op: user controls their own scroll position. Subscription kept to track collection changes if needed.
-	private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e) { }
+	private void OnScrollChanged(object? sender, ScrollChangedEventArgs e)
+	{
+		var extent = MessageScroller.Extent.Height;
+		var viewport = MessageScroller.Viewport.Height;
+		var offset = MessageScroller.Offset.Y;
+		_isAtBottom = extent - viewport - offset <= AtBottomThreshold;
+	}
+
+	private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+	{
+		// Unsubscribe from previously tracked progress message
+		UnsubscribeProgressMessage();
+
+		if (e.Action == NotifyCollectionChangedAction.Add && _subscribedVm != null)
+		{
+			// Subscribe to content changes on the last message (handles streaming/progress updates)
+			var last = _subscribedVm.Messages.Count > 0 ? _subscribedVm.Messages[^1] : null;
+			if (last != null)
+			{
+				_subscribedProgressMsg = last;
+				last.PropertyChanged += OnLastMessagePropertyChanged;
+			}
+		}
+
+		if (_isAtBottom)
+			ScrollToEndDeferred();
+	}
+
+	private void OnLastMessagePropertyChanged(object? sender, PropertyChangedEventArgs e)
+	{
+		if (e.PropertyName == nameof(MessageEntryViewModel.Content) && _isAtBottom)
+			ScrollToEndDeferred();
+	}
+
+	private void UnsubscribeProgressMessage()
+	{
+		if (_subscribedProgressMsg != null)
+		{
+			_subscribedProgressMsg.PropertyChanged -= OnLastMessagePropertyChanged;
+			_subscribedProgressMsg = null;
+		}
+	}
+
+	private void ScrollToEndDeferred()
+	{
+		Dispatcher.UIThread.Post(() => MessageScroller.ScrollToEnd(), DispatcherPriority.Background);
+	}
 
 	private void OnScrollerWheel(object? sender, PointerWheelEventArgs e)
 	{
