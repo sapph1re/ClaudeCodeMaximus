@@ -224,7 +224,23 @@ public sealed class SessionViewModel : ViewModelBase
 			case "system" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
 				_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, evt.Content);
 				break;
-			case "result" when evt.SessionId is not null:
+			case "result" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
+				// Error result (e.g. "No conversation found with session ID: ...").
+				// Log it as a SYSTEM message but do NOT update the stored session ID —
+				// the error response's session_id is a new throwaway ID that will also
+				// fail on the next resume attempt, creating a cascading chain of broken IDs.
+				_log.Warning("Claude result error: {Error}", evt.Content);
+				_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleSystem, evt.Content);
+
+				// Clear the stale session ID so the next send starts a fresh conversation.
+				if (evt.Content.Contains("No conversation found", StringComparison.OrdinalIgnoreCase))
+				{
+					_log.Information("Clearing stale ClaudeSessionId for session {FileName}", _node.FileName);
+					_node.Model.ClaudeSessionId = null;
+					_appSettings.Save();
+				}
+				break;
+			case "result" when !evt.IsError && evt.SessionId is not null:
 				_node.Model.ClaudeSessionId = evt.SessionId;
 				_appSettings.Save();
 				break;
@@ -268,6 +284,20 @@ public sealed class SessionViewModel : ViewModelBase
 					break;
 
 				case "system" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
+					Messages.Add(new MessageEntryViewModel
+					{
+						Role      = Constants.SessionFile.RoleSystem,
+						Content   = evt.Content,
+						Timestamp = evt.Timestamp,
+					});
+					break;
+
+				case "result" when evt.IsError && !string.IsNullOrWhiteSpace(evt.Content):
+					for (var i = Messages.Count - 1; i >= 0; i--)
+					{
+						if (Messages[i].IsProgress)
+							Messages.RemoveAt(i);
+					}
 					Messages.Add(new MessageEntryViewModel
 					{
 						Role      = Constants.SessionFile.RoleSystem,

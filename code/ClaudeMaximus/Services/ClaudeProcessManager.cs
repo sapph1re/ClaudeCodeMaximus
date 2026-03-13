@@ -217,9 +217,27 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 	{
 		var sessionId = root.TryGetProperty("session_id", out var sidEl) ? sidEl.GetString() : null;
 		var isError   = root.TryGetProperty("is_error", out var errEl) && errEl.GetBoolean();
-		var errorMsg  = isError && root.TryGetProperty("error", out var errMsgEl)
-			? errMsgEl.GetString()
-			: null;
+
+		string? errorMsg = null;
+		if (isError)
+		{
+			// Claude emits errors as an "errors" array of strings, not a single "error" property.
+			if (root.TryGetProperty("errors", out var errorsArr) && errorsArr.ValueKind == JsonValueKind.Array)
+			{
+				var sb = new StringBuilder();
+				foreach (var item in errorsArr.EnumerateArray())
+				{
+					if (sb.Length > 0)
+						sb.Append("; ");
+					sb.Append(item.GetString());
+				}
+				if (sb.Length > 0)
+					errorMsg = sb.ToString();
+			}
+			// Fallback: also check singular "error" property just in case
+			else if (root.TryGetProperty("error", out var errMsgEl))
+				errorMsg = errMsgEl.GetString();
+		}
 
 		return new ClaudeStreamEvent
 		{
