@@ -44,12 +44,17 @@
                                     <ColumnDefinition Width="52"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0"
-                                           Text="{Binding FormattedTime}"
-                                           FontSize="10" Opacity="0.35"
-                                           VerticalAlignment="Bottom"
-                                           HorizontalAlignment="Right"
-                                           Margin="0,0,6,5"/>
+                                <StackPanel Grid.Column="0"
+                                            VerticalAlignment="Bottom"
+                                            HorizontalAlignment="Right"
+                                            Margin="0,0,6,5">
+                                    <TextBlock Text="{Binding FormattedDate}"
+                                               FontSize="9" Opacity="0.3"
+                                               HorizontalAlignment="Right"/>
+                                    <TextBlock Text="{Binding FormattedTime}"
+                                               FontSize="10" Opacity="0.35"
+                                               HorizontalAlignment="Right"/>
+                                </StackPanel>
                                 <Border Grid.Column="1" Padding="10,7" CornerRadius="8" Background="#1E3A5F">
                                     <StackPanel>
                                         <TextBlock Text="You" FontSize="11" Foreground="White" Opacity="0.6" Margin="0,0,0,3"/>
@@ -80,12 +85,17 @@
                                         FontFamily="Cascadia Code,Consolas,monospace"
                                         FontSize="{Binding DataContext.AssistantFontSize, ElementName=Root}"/>
                                 </Panel>
-                                <TextBlock Grid.Column="1"
-                                           Text="{Binding FormattedTime}"
-                                           FontSize="10" Opacity="0.35"
-                                           VerticalAlignment="Bottom"
-                                           HorizontalAlignment="Left"
-                                           Margin="4,0,8,2"/>
+                                <StackPanel Grid.Column="1"
+                                            VerticalAlignment="Bottom"
+                                            HorizontalAlignment="Left"
+                                            Margin="4,0,8,2">
+                                    <TextBlock Text="{Binding FormattedDate}"
+                                               FontSize="9" Opacity="0.3"
+                                               HorizontalAlignment="Left"/>
+                                    <TextBlock Text="{Binding FormattedTime}"
+                                               FontSize="10" Opacity="0.35"
+                                               HorizontalAlignment="Left"/>
+                                </StackPanel>
                             </Grid>
 
                             <!-- System message -->

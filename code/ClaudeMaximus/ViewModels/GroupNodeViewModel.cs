@@ -8,6 +8,7 @@ namespace ClaudeMaximus.ViewModels;
 public sealed class GroupNodeViewModel : ViewModelBase
 {
 	private string _name;
+	private bool _isVisible = true;
 
 	public GroupNodeModel Model { get; }
 
@@ -51,6 +52,13 @@ public sealed class GroupNodeViewModel : ViewModelBase
 	{
 		Children.Add(session);
 		Model.Sessions.Add(session.Model);
+	}
+
+	/// <summary>Controls visibility during search filtering.</summary>
+	public bool IsVisible
+	{
+		get => _isVisible;
+		set => this.RaiseAndSetIfChanged(ref _isVisible, value);
 	}
 
 	public bool CanDelete => Children.Count == 0;

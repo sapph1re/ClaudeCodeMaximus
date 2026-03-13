@@ -26,6 +26,11 @@
         <TreeView x:Name="Tree"
                   ItemsSource="{Binding Directories}"
                   SelectionChanged="OnTreeSelectionChanged">
+            <TreeView.Styles>
+                <Style Selector="TreeViewItem">
+                    <Setter Property="IsVisible" Value="{ReflectionBinding IsVisible}"/>
+                </Style>
+            </TreeView.Styles>
             <TreeView.DataTemplates>
 
                 <!-- Directory node — reflection bindings used because compiled bindings
@@ -81,15 +86,24 @@
                                 <MenuItem Header="Delete" Tag="DeleteSession"  Click="OnContextMenuClicked"/>
                             </ContextMenu>
                         </Border.ContextMenu>
-                        <StackPanel Orientation="Horizontal" Spacing="6" Margin="2,1">
-                            <Panel Width="8" Height="8" VerticalAlignment="Center">
-                                <Ellipse Width="8" Height="8" Fill="DodgerBlue" Opacity="0.7"
-                                         IsVisible="{Binding IsResumable}"/>
-                                <Ellipse Width="8" Height="8" Fill="LimeGreen"
-                                         IsVisible="{Binding IsRunning}"/>
-                            </Panel>
-                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
-                        </StackPanel>
+                        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*">
+                            <StackPanel Grid.Row="0" Grid.ColumnSpan="2"
+                                        Orientation="Horizontal" Spacing="6" Margin="2,1,2,0">
+                                <Panel Width="8" Height="8" VerticalAlignment="Center">
+                                    <Ellipse Width="8" Height="8" Fill="DodgerBlue" Opacity="0.7"
+                                             IsVisible="{Binding IsResumable}"/>
+                                    <Ellipse Width="8" Height="8" Fill="LimeGreen"
+                                             IsVisible="{Binding IsRunning}"/>
+                                </Panel>
+                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Grid.Row="1" Grid.Column="1"
+                                       Text="{Binding LastPromptTime}"
+                                       IsVisible="{Binding LastPromptTime, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                       FontSize="10" Foreground="Gray" Opacity="0.6"
+                                       HorizontalAlignment="Right"
+                                       Margin="0,0,4,1"/>
+                        </Grid>
                     </Border>
                 </DataTemplate>
 

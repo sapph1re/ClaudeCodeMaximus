@@ -53,11 +53,16 @@
 - [DONE] Auto-scroll to bottom on new messages
 - [DONE] Session name header
 
-### P2.3 Search (FR.1.9) ← NEXT
-- [ ] `ISessionSearchService` + `SessionSearchService` — linear scan over session `.txt` files
-- [ ] Wire `SessionTreeViewModel.SearchText` changes to filter tree
-- [ ] Sessions not matching query hidden; ancestor nodes of matches expanded
+### P2.3 Search (FR.1.9) ✓
+- [DONE] `ISessionSearchService` + `SessionSearchService` — linear scan over session `.txt` files
+- [DONE] Wire `SessionTreeViewModel.SearchText` changes to filter tree (300ms debounce, async file scan)
+- [DONE] Sessions not matching query hidden; ancestor nodes of matches expanded
+- [DONE] `IsVisible` property on all node ViewModels, bound via `ReflectionBinding` on `TreeViewItem` style
 - [ ] Unit tests: match / no-match / ancestor expansion
+
+### P2.4 UI polish
+- [DONE] Date shown above time on user and assistant message bubbles (`FormattedDate` property)
+- [DONE] Last user prompt date/time shown on session tree nodes (small grey text, bottom-right)
 
 ---
 
@@ -81,7 +86,7 @@
 
 ## Backlog / Future
 
-- [ ] **P2.3 Search** — see above, the only item from original scope not yet done
+- [ ] **P2.3 Search unit tests** — match / no-match / ancestor expansion
 - [ ] Session file watcher (detect disk deletion so tree delete button becomes available)
 - [ ] Integration tests for `ClaudeProcessManager` with a mock process
 - [ ] Search indexing (replace linear scan when session count grows)

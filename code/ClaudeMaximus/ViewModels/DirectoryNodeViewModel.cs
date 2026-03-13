@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using ClaudeMaximus.Models;
 using ClaudeMaximus.Services;
+using ReactiveUI;
 
 namespace ClaudeMaximus.ViewModels;
 
@@ -8,6 +9,7 @@ namespace ClaudeMaximus.ViewModels;
 public sealed class DirectoryNodeViewModel : ViewModelBase
 {
 	private readonly IDirectoryLabelService _labelService;
+	private bool _isVisible = true;
 
 	public DirectoryNodeModel Model { get; }
 
@@ -42,6 +44,13 @@ public sealed class DirectoryNodeViewModel : ViewModelBase
 	{
 		Children.Add(session);
 		Model.Sessions.Add(session.Model);
+	}
+
+	/// <summary>Controls visibility during search filtering.</summary>
+	public bool IsVisible
+	{
+		get => _isVisible;
+		set => this.RaiseAndSetIfChanged(ref _isVisible, value);
 	}
 
 	public bool CanDelete => Children.Count == 0;

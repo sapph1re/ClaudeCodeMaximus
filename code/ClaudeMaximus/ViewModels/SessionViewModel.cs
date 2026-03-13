@@ -176,12 +176,14 @@ public sealed class SessionViewModel : ViewModelBase
 		}
 
 		_fileService.AppendMessage(_node.FileName, Constants.SessionFile.RoleUser, message);
+		var now = DateTimeOffset.UtcNow;
 		Messages.Add(new MessageEntryViewModel
 		{
 			Role      = Constants.SessionFile.RoleUser,
 			Content   = message,
-			Timestamp = DateTimeOffset.UtcNow,
+			Timestamp = now,
 		});
+		_node.LastPromptTime = now.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
 
 		Messages.Add(new MessageEntryViewModel
 		{

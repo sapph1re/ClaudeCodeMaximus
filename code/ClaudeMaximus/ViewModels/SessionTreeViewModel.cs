@@ -1,8 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Reactive;
+using System.Reactive.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Avalonia.Threading;
 using ClaudeMaximus.Models;
 using ClaudeMaximus.Services;
@@ -17,8 +21,10 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	private readonly IDirectoryLabelService _labelService;
 	private readonly ISessionFileService _sessionFileService;
 	private readonly IClaudeSessionStatusService _claudeSessionStatus;
+	private readonly ISessionSearchService _searchService;
 	private string _searchText = string.Empty;
 	private SessionNodeViewModel? _selectedSession;
+	private CancellationTokenSource? _searchCts;
 
 	public ObservableCollection<DirectoryNodeViewModel> Directories { get; } = [];
 
@@ -40,17 +46,25 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		IAppSettingsService appSettings,
 		IDirectoryLabelService labelService,
 		ISessionFileService sessionFileService,
-		IClaudeSessionStatusService claudeSessionStatus)
+		IClaudeSessionStatusService claudeSessionStatus,
+		ISessionSearchService searchService)
 	{
 		_appSettings = appSettings;
 		_labelService = labelService;
 		_sessionFileService = sessionFileService;
 		_claudeSessionStatus = claudeSessionStatus;
+		_searchService = searchService;
 
 		AddDirectoryCommand = ReactiveCommand.Create(PromptAddDirectory);
 
 		LoadFromSettings();
 		RefreshSessionResumability();
+		RefreshLastPromptTimes();
+
+		this.WhenAnyValue(x => x.SearchText)
+			.Throttle(TimeSpan.FromMilliseconds(300))
+			.ObserveOn(RxApp.MainThreadScheduler)
+			.Subscribe(_ => ApplySearchFilter());
 
 		var timer = new DispatcherTimer
 		{
@@ -226,4 +240,143 @@ public sealed class SessionTreeViewModel : ViewModelBase
 			}
 		}
 	}
+
+	// --- Search ---
+
+	private void ApplySearchFilter()
+	{
+		_searchCts?.Cancel();
+
+		var query = SearchText?.Trim() ?? string.Empty;
+
+		if (string.IsNullOrEmpty(query))
+		{
+			ShowAllNodes();
+			return;
+		}
+
+		var cts = new CancellationTokenSource();
+		_searchCts = cts;
+
+		Task.Run(() =>
+		{
+			if (cts.Token.IsCancellationRequested)
+				return;
+
+			var matches = _searchService.FindMatchingSessionFiles(query);
+
+			if (cts.Token.IsCancellationRequested)
+				return;
+
+			Dispatcher.UIThread.Post(() =>
+			{
+				if (cts.Token.IsCancellationRequested)
+					return;
+
+				foreach (var dir in Directories)
+				{
+					var dirHasMatch = ApplyFilterToChildren(dir.Children, matches);
+					dir.IsVisible = dirHasMatch;
+				}
+			});
+		}, cts.Token);
+	}
+
+	private static bool ApplyFilterToChildren(ObservableCollection<ViewModelBase> children, IReadOnlySet<string> matches)
+	{
+		var anyVisible = false;
+
+		foreach (var child in children)
+		{
+			switch (child)
+			{
+				case SessionNodeViewModel session:
+					var visible = matches.Contains(session.FileName);
+					session.IsVisible = visible;
+					if (visible) anyVisible = true;
+					break;
+				case GroupNodeViewModel group:
+					var groupHasMatch = ApplyFilterToChildren(group.Children, matches);
+					group.IsVisible = groupHasMatch;
+					if (groupHasMatch) anyVisible = true;
+					break;
+			}
+		}
+
+		return anyVisible;
+	}
+
+	private void ShowAllNodes()
+	{
+		foreach (var dir in Directories)
+		{
+			dir.IsVisible = true;
+			ShowAllChildren(dir.Children);
+		}
+	}
+
+	private static void ShowAllChildren(ObservableCollection<ViewModelBase> children)
+	{
+		foreach (var child in children)
+		{
+			switch (child)
+			{
+				case SessionNodeViewModel session:
+					session.IsVisible = true;
+					break;
+				case GroupNodeViewModel group:
+					group.IsVisible = true;
+					ShowAllChildren(group.Children);
+					break;
+			}
+		}
+	}
+
+	// --- Last prompt time ---
+
+	private void RefreshLastPromptTimes()
+	{
+		foreach (var dir in Directories)
+			RefreshLastPromptTimesInChildren(dir.Children);
+	}
+
+	private void RefreshLastPromptTimesInChildren(ObservableCollection<ViewModelBase> children)
+	{
+		foreach (var child in children)
+		{
+			switch (child)
+			{
+				case SessionNodeViewModel session:
+					LoadLastPromptTime(session);
+					break;
+				case GroupNodeViewModel group:
+					RefreshLastPromptTimesInChildren(group.Children);
+					break;
+			}
+		}
+	}
+
+	private void LoadLastPromptTime(SessionNodeViewModel session)
+	{
+		try
+		{
+			var entries = _sessionFileService.ReadEntries(session.FileName);
+			for (var i = entries.Count - 1; i >= 0; i--)
+			{
+				if (entries[i].Role == Constants.SessionFile.RoleUser)
+				{
+					var local = entries[i].Timestamp.LocalDateTime;
+					session.LastPromptTime = local.ToString("yyyy-MM-dd HH:mm");
+					return;
+				}
+			}
+		}
+		catch
+		{
+			// Session file may not exist or be corrupted; leave LastPromptTime null.
+		}
+
+		session.LastPromptTime = null;
+	}
+
 }

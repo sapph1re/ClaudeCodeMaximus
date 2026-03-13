@@ -1,5 +1,4 @@
 using ClaudeMaximus.Models;
-using ClaudeMaximus.Services;
 using ReactiveUI;
 
 namespace ClaudeMaximus.ViewModels;
@@ -10,6 +9,8 @@ public sealed class SessionNodeViewModel : ViewModelBase
 	private string _name;
 	private bool _isRunning;
 	private bool _isResumable;
+	private bool _isVisible = true;
+	private string? _lastPromptTime;
 
 	public SessionNodeModel Model { get; }
 
@@ -37,6 +38,20 @@ public sealed class SessionNodeViewModel : ViewModelBase
 	{
 		get => _isResumable;
 		set => this.RaiseAndSetIfChanged(ref _isResumable, value);
+	}
+
+	/// <summary>Controls visibility during search filtering.</summary>
+	public bool IsVisible
+	{
+		get => _isVisible;
+		set => this.RaiseAndSetIfChanged(ref _isVisible, value);
+	}
+
+	/// <summary>Formatted date/time of the last user prompt in this session.</summary>
+	public string? LastPromptTime
+	{
+		get => _lastPromptTime;
+		set => this.RaiseAndSetIfChanged(ref _lastPromptTime, value);
 	}
 
 	public SessionNodeViewModel(SessionNodeModel model)
