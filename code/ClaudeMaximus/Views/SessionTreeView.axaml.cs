@@ -1,6 +1,9 @@
+using System;
+using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ClaudeMaximus.ViewModels;
 
@@ -9,9 +12,36 @@ namespace ClaudeMaximus.Views;
 /// <remarks>Created by Claude</remarks>
 public partial class SessionTreeView : UserControl
 {
+	private readonly DispatcherTimer _recencyTimer;
+
 	public SessionTreeView()
 	{
 		InitializeComponent();
+
+		// Refresh recency bars every 60 seconds so colors update as time passes
+		_recencyTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
+		_recencyTimer.Tick += (_, _) => RefreshAllRecencyBrushes();
+		_recencyTimer.Start();
+	}
+
+	private void RefreshAllRecencyBrushes()
+	{
+		if (DataContext is not SessionTreeViewModel vm)
+			return;
+
+		foreach (var dir in vm.Directories)
+			RefreshRecencyInChildren(dir.Children);
+	}
+
+	private static void RefreshRecencyInChildren(ObservableCollection<ViewModelBase> children)
+	{
+		foreach (var child in children)
+		{
+			if (child is SessionNodeViewModel session)
+				session.RefreshRecencyBrush();
+			else if (child is GroupNodeViewModel group)
+				RefreshRecencyInChildren(group.Children);
+		}
 	}
 
 	// ── Add Directory ────────────────────────────────────────────────────────

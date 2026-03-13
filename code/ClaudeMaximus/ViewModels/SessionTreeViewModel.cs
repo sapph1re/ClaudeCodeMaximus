@@ -365,6 +365,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 			{
 				if (entries[i].Role == Constants.SessionFile.RoleUser)
 				{
+					session.LastPromptTimestamp = entries[i].Timestamp;
 					var local = entries[i].Timestamp.LocalDateTime;
 					session.LastPromptTime = local.ToString("yyyy-MM-dd HH:mm");
 					return;
@@ -377,6 +378,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		}
 
 		session.LastPromptTime = null;
+		session.LastPromptTimestamp = null;
 	}
 
 }

@@ -17,6 +17,9 @@ public static class ThemeApplicator
     public const string KeyInlineCodeBg   = "CmxInlineCodeBg";
     public const string KeyInlineCodeFg   = "CmxInlineCodeFg";
     public const string KeySystemBubbleBg = "CmxSystemBubbleBg";
+    public const string KeyRecency15Min  = "CmxRecency15Min";
+    public const string KeyRecency30Min  = "CmxRecency30Min";
+    public const string KeyRecency60Min  = "CmxRecency60Min";
 
     public static void Apply(AppSettingsModel settings)
     {
@@ -44,6 +47,9 @@ public static class ThemeApplicator
         SetBrush(KeyInlineCodeBg,   colors.InlineCodeBackground);
         SetBrush(KeyInlineCodeFg,   colors.InlineCodeText);
         SetBrush(KeySystemBubbleBg, colors.SystemBubbleBackground);
+        SetBrush(KeyRecency15Min,  colors.Recency15MinBackground);
+        SetBrush(KeyRecency30Min,  colors.Recency30MinBackground);
+        SetBrush(KeyRecency60Min,  colors.Recency60MinBackground);
     }
 
     private static void SetBrush(string key, string hex)

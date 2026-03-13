@@ -7,7 +7,7 @@
         x:Class="ClaudeMaximus.Views.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
         Title="Settings"
-        Width="520" Height="620"
+        Width="520" Height="700"
         CanResize="False"
         WindowStartupLocation="CenterOwner">
 
@@ -46,7 +46,7 @@
             <!-- Color customization for selected theme -->
             <TextBlock Text="Colors (for selected theme)" FontWeight="SemiBold"/>
 
-            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" Margin="0,0,0,0">
+            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,0,0,0">
 
                 <!-- Row 0: Input box -->
                 <StackPanel Grid.Row="0" Grid.Column="0" Spacing="2" Margin="0,0,8,8">
@@ -92,6 +92,29 @@
                 <StackPanel Grid.Row="4" Grid.Column="0" Spacing="2" Margin="0,0,8,8">
                     <TextBlock Text="System bubble background" FontSize="12" Opacity="0.7"/>
                     <TextBox Text="{Binding SystemBubbleBackground}" FontFamily="Consolas" FontSize="12"/>
+                </StackPanel>
+
+                <!-- Row 5: Separator label for recency -->
+                <TextBlock Grid.Row="5" Grid.ColumnSpan="2"
+                           Text="Session recency bars" FontSize="12" FontWeight="SemiBold"
+                           Opacity="0.7" Margin="0,4,0,4"/>
+
+                <!-- Row 6: Recency colors -->
+                <StackPanel Grid.Row="6" Grid.Column="0" Spacing="2" Margin="0,0,8,8">
+                    <TextBlock Text="Active (15 min)" FontSize="12" Opacity="0.7"/>
+                    <TextBox Text="{Binding Recency15MinBackground}" FontFamily="Consolas" FontSize="12"/>
+                </StackPanel>
+                <StackPanel Grid.Row="6" Grid.Column="1" Spacing="2" Margin="0,0,0,8">
+                    <Grid ColumnDefinitions="*,*" Margin="0,0,0,0">
+                        <StackPanel Grid.Column="0" Spacing="2" Margin="0,0,8,0">
+                            <TextBlock Text="Recent (30 min)" FontSize="12" Opacity="0.7"/>
+                            <TextBox Text="{Binding Recency30MinBackground}" FontFamily="Consolas" FontSize="12"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="2">
+                            <TextBlock Text="Past hour (60 min)" FontSize="12" Opacity="0.7"/>
+                            <TextBox Text="{Binding Recency60MinBackground}" FontFamily="Consolas" FontSize="12"/>
+                        </StackPanel>
+                    </Grid>
                 </StackPanel>
 
             </Grid>

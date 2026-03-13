@@ -79,7 +79,9 @@
                 <!-- Session node -->
                 <DataTemplate DataType="vm:SessionNodeViewModel"
                               x:CompileBindings="False">
-                    <Border HorizontalAlignment="Stretch" Background="Transparent">
+                    <Border HorizontalAlignment="Stretch"
+                            Background="{Binding RecencyBrush}"
+                            CornerRadius="3" Padding="0">
                         <Border.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="Rename" Tag="RenameSession" Click="OnContextMenuClicked"/>

@@ -1,4 +1,8 @@
+using System;
+using Avalonia;
+using Avalonia.Media;
 using ClaudeMaximus.Models;
+using ClaudeMaximus.Services;
 using ReactiveUI;
 
 namespace ClaudeMaximus.ViewModels;
@@ -11,6 +15,8 @@ public sealed class SessionNodeViewModel : ViewModelBase
 	private bool _isResumable;
 	private bool _isVisible = true;
 	private string? _lastPromptTime;
+	private DateTimeOffset? _lastPromptTimestamp;
+	private IBrush? _recencyBrush;
 
 	public SessionNodeModel Model { get; }
 
@@ -52,6 +58,54 @@ public sealed class SessionNodeViewModel : ViewModelBase
 	{
 		get => _lastPromptTime;
 		set => this.RaiseAndSetIfChanged(ref _lastPromptTime, value);
+	}
+
+	/// <summary>Actual timestamp of the last user prompt, used for recency calculations.</summary>
+	public DateTimeOffset? LastPromptTimestamp
+	{
+		get => _lastPromptTimestamp;
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _lastPromptTimestamp, value);
+			RefreshRecencyBrush();
+		}
+	}
+
+	/// <summary>Background brush for the session node based on last prompt recency.</summary>
+	public IBrush? RecencyBrush
+	{
+		get => _recencyBrush;
+		private set => this.RaiseAndSetIfChanged(ref _recencyBrush, value);
+	}
+
+	/// <summary>Recalculates the recency brush based on how long ago the last prompt was.</summary>
+	public void RefreshRecencyBrush()
+	{
+		if (_lastPromptTimestamp is null)
+		{
+			RecencyBrush = null;
+			return;
+		}
+
+		var elapsed = DateTimeOffset.UtcNow - _lastPromptTimestamp.Value;
+		string? key = elapsed.TotalMinutes switch
+		{
+			<= 15 => ThemeApplicator.KeyRecency15Min,
+			<= 30 => ThemeApplicator.KeyRecency30Min,
+			<= 60 => ThemeApplicator.KeyRecency60Min,
+			_     => null,
+		};
+
+		if (key is null)
+		{
+			RecencyBrush = null;
+			return;
+		}
+
+		if (Application.Current!.Resources.TryGetResource(key, null, out var resource) && resource is IBrush brush)
+			RecencyBrush = brush;
+		else
+			RecencyBrush = null;
 	}
 
 	public SessionNodeViewModel(SessionNodeModel model)

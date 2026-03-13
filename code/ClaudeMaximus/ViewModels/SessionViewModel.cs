@@ -204,6 +204,7 @@ public sealed class SessionViewModel : ViewModelBase
 			Timestamp = now,
 		});
 		_node.LastPromptTime = now.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
+		_node.LastPromptTimestamp = now;
 
 		Messages.Add(new MessageEntryViewModel
 		{

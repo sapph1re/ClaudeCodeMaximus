@@ -252,8 +252,17 @@ Maximum 15 results displayed.
 - Code block background and text color
 - Inline code background and text color
 - System message bubble background color
+- Session recency bar colors (3 tiers: 15 min, 30 min, 60 min)
 
-**FR.9.3 — Color application:** Custom colors are applied as application-level dynamic resources (`CmxInputBg`, `CmxInputFg`, `CmxUserBubbleBg`, `CmxUserBubbleFg`, `CmxCodeBg`, `CmxCodeFg`, `CmxInlineCodeBg`, `CmxInlineCodeFg`, `CmxSystemBubbleBg`). These are consumed by SessionView (AXAML `DynamicResource` bindings) and MarkdownView (code-behind resource lookups). Colors are re-applied immediately when the theme is toggled or when settings are saved.
+**FR.9.3 — Color application:** Custom colors are applied as application-level dynamic resources (`CmxInputBg`, `CmxInputFg`, `CmxUserBubbleBg`, `CmxUserBubbleFg`, `CmxCodeBg`, `CmxCodeFg`, `CmxInlineCodeBg`, `CmxInlineCodeFg`, `CmxSystemBubbleBg`, `CmxRecency15Min`, `CmxRecency30Min`, `CmxRecency60Min`). These are consumed by SessionView (AXAML `DynamicResource` bindings), MarkdownView (code-behind resource lookups), and SessionNodeViewModel (recency brush lookup). Colors are re-applied immediately when the theme is toggled or when settings are saved.
+
+**FR.9.5 — Session recency bars:** Session nodes in the tree display a colored background bar indicating how recently the last user prompt was sent:
+- **Light green** (customizable): last prompt within 15 minutes
+- **Green** (customizable): last prompt within 30 minutes
+- **Dark green** (customizable): last prompt within 1 hour
+- No bar: last prompt more than 1 hour ago (or no prompts)
+
+Recency bars refresh automatically every 60 seconds so the visual state stays current as time passes. The three recency colors are per-theme and editable in the Settings window.
 
 **FR.9.4 — Sensible defaults:** Both themes ship with sensible default color values. Dark defaults use VS Code-inspired dark palette; Light defaults use standard light-background colors. Users can customize any color via hex input in the Settings window.
 

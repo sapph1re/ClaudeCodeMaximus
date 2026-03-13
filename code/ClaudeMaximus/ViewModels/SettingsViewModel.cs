@@ -24,6 +24,9 @@ public sealed class SettingsViewModel : ViewModelBase
 	private string _inlineCodeBackground;
 	private string _inlineCodeText;
 	private string _systemBubbleBackground;
+	private string _recency15MinBackground;
+	private string _recency30MinBackground;
+	private string _recency60MinBackground;
 
 	public string SessionFilesRoot
 	{
@@ -101,6 +104,24 @@ public sealed class SettingsViewModel : ViewModelBase
 		set => this.RaiseAndSetIfChanged(ref _systemBubbleBackground, value);
 	}
 
+	public string Recency15MinBackground
+	{
+		get => _recency15MinBackground;
+		set => this.RaiseAndSetIfChanged(ref _recency15MinBackground, value);
+	}
+
+	public string Recency30MinBackground
+	{
+		get => _recency30MinBackground;
+		set => this.RaiseAndSetIfChanged(ref _recency30MinBackground, value);
+	}
+
+	public string Recency60MinBackground
+	{
+		get => _recency60MinBackground;
+		set => this.RaiseAndSetIfChanged(ref _recency60MinBackground, value);
+	}
+
 	public ReactiveCommand<Unit, Unit> SaveCommand { get; }
 
 	public SettingsViewModel(IAppSettingsService appSettings)
@@ -120,6 +141,9 @@ public sealed class SettingsViewModel : ViewModelBase
 		_inlineCodeBackground  = colors.InlineCodeBackground;
 		_inlineCodeText        = colors.InlineCodeText;
 		_systemBubbleBackground = colors.SystemBubbleBackground;
+		_recency15MinBackground = colors.Recency15MinBackground;
+		_recency30MinBackground = colors.Recency30MinBackground;
+		_recency60MinBackground = colors.Recency60MinBackground;
 
 		SaveCommand = ReactiveCommand.Create(Save);
 	}
@@ -136,6 +160,9 @@ public sealed class SettingsViewModel : ViewModelBase
 		InlineCodeBackground  = colors.InlineCodeBackground;
 		InlineCodeText        = colors.InlineCodeText;
 		SystemBubbleBackground = colors.SystemBubbleBackground;
+		Recency15MinBackground = colors.Recency15MinBackground;
+		Recency30MinBackground = colors.Recency30MinBackground;
+		Recency60MinBackground = colors.Recency60MinBackground;
 	}
 
 	private void Save()
@@ -155,6 +182,9 @@ public sealed class SettingsViewModel : ViewModelBase
 		colors.InlineCodeBackground  = _inlineCodeBackground;
 		colors.InlineCodeText        = _inlineCodeText;
 		colors.SystemBubbleBackground = _systemBubbleBackground;
+		colors.Recency15MinBackground = _recency15MinBackground;
+		colors.Recency30MinBackground = _recency30MinBackground;
+		colors.Recency60MinBackground = _recency60MinBackground;
 
 		ThemeApplicator.Apply(_appSettings.Settings);
 		_appSettings.Save();

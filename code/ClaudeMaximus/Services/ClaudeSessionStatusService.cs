@@ -25,7 +25,10 @@ public sealed class ClaudeSessionStatusService : IClaudeSessionStatusService
 				slug,
 				claudeSessionId + Constants.ClaudeSessions.SessionFileExtension);
 
-			return File.Exists(sessionPath);
+			var exists = File.Exists(sessionPath);
+			_log.Debug("Resumability check: {SessionId} slug={Slug} path={Path} exists={Exists}",
+				claudeSessionId, slug, sessionPath, exists);
+			return exists;
 		}
 		catch (Exception ex)
 		{
@@ -36,12 +39,13 @@ public sealed class ClaudeSessionStatusService : IClaudeSessionStatusService
 
 	/// <summary>
 	/// Derives the project slug that Claude Code uses for its session storage path.
-	/// Replaces ':', '\', '/' with '-'.
+	/// Replaces ':', '\', '/' with '-'. Trailing separators are trimmed first.
 	/// Example: C:\Projects\Foo → C--Projects-Foo
 	/// </summary>
 	private static string BuildProjectSlug(string workingDirectory)
 	{
 		return workingDirectory
+			.TrimEnd('\\', '/')
 			.Replace(':', '-')
 			.Replace('\\', '-')
 			.Replace('/', '-');

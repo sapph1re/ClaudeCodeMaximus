@@ -17,25 +17,63 @@ namespace ClaudeMaximus.Views;
 public partial class MainWindow : Window
 {
 	private bool _closeConfirmed;
+	private PixelPoint? _pendingPosition;
 
 	public MainWindow()
 	{
 		InitializeComponent();
 		BuildNumberText.Text = GetBuildNumber();
-	}
-
-	protected override void OnLoaded(RoutedEventArgs e)
-	{
-		base.OnLoaded(e);
 
 		var ws = App.Services.GetRequiredService<IAppSettingsService>().Settings.Window;
 
-		Width    = ws.Width;
-		Height   = ws.Height;
-		Position = new PixelPoint((int)ws.Left, (int)ws.Top);
+		Width  = ws.Width;
+		Height = ws.Height;
 
 		MainContentGrid.ColumnDefinitions[0].Width = new GridLength(
 			Math.Clamp(ws.SplitterPosition, 180, 600));
+
+		// Validate saved position against current screens; defer actual positioning to Opened
+		_pendingPosition = ValidatePosition((int)ws.Left, (int)ws.Top, Width, Height);
+
+		Opened += OnWindowOpened;
+	}
+
+	private void OnWindowOpened(object? sender, EventArgs e)
+	{
+		Opened -= OnWindowOpened;
+
+		// Apply validated position now that the window handle exists
+		if (_pendingPosition.HasValue)
+		{
+			Position = _pendingPosition.Value;
+			_pendingPosition = null;
+		}
+
+		// Restore active session selection now that the tree UI is ready
+		if (DataContext is MainWindowViewModel vm)
+			vm.RestoreActiveSession();
+	}
+
+	/// <summary>
+	/// Checks if the saved window center lands on any connected screen.
+	/// If not, falls back to primary screen center.
+	/// </summary>
+	private PixelPoint ValidatePosition(int left, int top, double width, double height)
+	{
+		var centerX = left + (int)(width / 2);
+		var centerY = top + (int)(height / 2);
+
+		foreach (var screen in Screens.All)
+		{
+			if (screen.Bounds.Contains(new PixelPoint(centerX, centerY)))
+				return new PixelPoint(left, top);
+		}
+
+		// Saved position is off-screen — center on primary
+		var primary = Screens.Primary?.Bounds ?? new PixelRect(0, 0, 1920, 1080);
+		var x = primary.X + (primary.Width - (int)width) / 2;
+		var y = primary.Y + (primary.Height - (int)height) / 2;
+		return new PixelPoint(x, y);
 	}
 
 	protected override async void OnClosing(WindowClosingEventArgs e)

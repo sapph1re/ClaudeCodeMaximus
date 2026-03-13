@@ -13,6 +13,15 @@ public sealed class ThemeColorsModel
     public string InlineCodeText         { get; set; } = "#202020";
     public string SystemBubbleBackground { get; set; } = "#BFE0F7";
 
+    /// <summary>Session tree recency bar: last prompt within 15 minutes.</summary>
+    public string Recency15MinBackground { get; set; } = "#90EE90";
+
+    /// <summary>Session tree recency bar: last prompt within 30 minutes.</summary>
+    public string Recency30MinBackground { get; set; } = "#3CB371";
+
+    /// <summary>Session tree recency bar: last prompt within 1 hour.</summary>
+    public string Recency60MinBackground { get; set; } = "#2E8B57";
+
     public static ThemeColorsModel DefaultDark() => new()
     {
         InputBoxBackground     = "#1E1E1E",
@@ -24,5 +33,8 @@ public sealed class ThemeColorsModel
         InlineCodeBackground   = "#252525",
         InlineCodeText         = "#D4D4D4",
         SystemBubbleBackground = "#1A3A50",
+        Recency15MinBackground = "#2D5A3D",
+        Recency30MinBackground = "#1E4D2B",
+        Recency60MinBackground = "#15381F",
     };
 }

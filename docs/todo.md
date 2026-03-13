@@ -155,6 +155,18 @@
 
 ---
 
+## Phase 7 — Session Recency Bars (FR.9.5)
+
+### P7.1 Recency Bars
+- [DONE] 3 recency color properties in `ThemeColorsModel` with dark/light defaults
+- [DONE] `CmxRecency15Min`/`CmxRecency30Min`/`CmxRecency60Min` resource keys in `ThemeApplicator`
+- [DONE] `LastPromptTimestamp` + `RecencyBrush` on `SessionNodeViewModel`
+- [DONE] Tree session node background bound to `RecencyBrush`
+- [DONE] 60-second refresh timer in `SessionTreeView` to keep recency current
+- [DONE] Recency color settings in `SettingsViewModel` + `SettingsWindow.axaml`
+
+---
+
 ## Backlog / Future
 
 - [ ] **P2.3 Search unit tests** — match / no-match / ancestor expansion
