@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:ClaudeMaximus.ViewModels"
+        xmlns:conv="using:ClaudeMaximus.Converters"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
@@ -10,6 +11,10 @@
         Width="520" Height="700"
         CanResize="False"
         WindowStartupLocation="CenterOwner">
+
+    <Window.Resources>
+        <conv:HexToColorConverter x:Key="HexToColor"/>
+    </Window.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="16" Spacing="12">
@@ -51,47 +56,83 @@
                 <!-- Row 0: Input box -->
                 <StackPanel Grid.Row="0" Grid.Column="0" Spacing="2" Margin="0,0,8,8">
                     <TextBlock Text="Input box background" FontSize="12" Opacity="0.7"/>
-                    <TextBox Text="{Binding InputBoxBackground}" FontFamily="Consolas" FontSize="12"/>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox Text="{Binding InputBoxBackground}" FontFamily="Consolas" FontSize="12"/>
+                        <ColorPicker Grid.Column="1" Margin="4,0,0,0" Width="32" Height="32"
+                                     Color="{Binding InputBoxBackground, Converter={StaticResource HexToColor}}"/>
+                    </Grid>
                 </StackPanel>
                 <StackPanel Grid.Row="0" Grid.Column="1" Spacing="2" Margin="0,0,0,8">
                     <TextBlock Text="Input box text" FontSize="12" Opacity="0.7"/>
-                    <TextBox Text="{Binding InputBoxText}" FontFamily="Consolas" FontSize="12"/>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox Text="{Binding InputBoxText}" FontFamily="Consolas" FontSize="12"/>
+                        <ColorPicker Grid.Column="1" Margin="4,0,0,0" Width="32" Height="32"
+                                     Color="{Binding InputBoxText, Converter={StaticResource HexToColor}}"/>
+                    </Grid>
                 </StackPanel>
 
                 <!-- Row 1: User bubble -->
                 <StackPanel Grid.Row="1" Grid.Column="0" Spacing="2" Margin="0,0,8,8">
                     <TextBlock Text="User bubble background" FontSize="12" Opacity="0.7"/>
-                    <TextBox Text="{Binding UserBubbleBackground}" FontFamily="Consolas" FontSize="12"/>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox Text="{Binding UserBubbleBackground}" FontFamily="Consolas" FontSize="12"/>
+                        <ColorPicker Grid.Column="1" Margin="4,0,0,0" Width="32" Height="32"
+                                     Color="{Binding UserBubbleBackground, Converter={StaticResource HexToColor}}"/>
+                    </Grid>
                 </StackPanel>
                 <StackPanel Grid.Row="1" Grid.Column="1" Spacing="2" Margin="0,0,0,8">
                     <TextBlock Text="User bubble text" FontSize="12" Opacity="0.7"/>
-                    <TextBox Text="{Binding UserBubbleText}" FontFamily="Consolas" FontSize="12"/>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox Text="{Binding UserBubbleText}" FontFamily="Consolas" FontSize="12"/>
+                        <ColorPicker Grid.Column="1" Margin="4,0,0,0" Width="32" Height="32"
+                                     Color="{Binding UserBubbleText, Converter={StaticResource HexToColor}}"/>
+                    </Grid>
                 </StackPanel>
 
                 <!-- Row 2: Code block -->
                 <StackPanel Grid.Row="2" Grid.Column="0" Spacing="2" Margin="0,0,8,8">
                     <TextBlock Text="Code block background" FontSize="12" Opacity="0.7"/>
-                    <TextBox Text="{Binding CodeBlockBackground}" FontFamily="Consolas" FontSize="12"/>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox Text="{Binding CodeBlockBackground}" FontFamily="Consolas" FontSize="12"/>
+                        <ColorPicker Grid.Column="1" Margin="4,0,0,0" Width="32" Height="32"
+                                     Color="{Binding CodeBlockBackground, Converter={StaticResource HexToColor}}"/>
+                    </Grid>
                 </StackPanel>
                 <StackPanel Grid.Row="2" Grid.Column="1" Spacing="2" Margin="0,0,0,8">
                     <TextBlock Text="Code block text" FontSize="12" Opacity="0.7"/>
-                    <TextBox Text="{Binding CodeBlockText}" FontFamily="Consolas" FontSize="12"/>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox Text="{Binding CodeBlockText}" FontFamily="Consolas" FontSize="12"/>
+                        <ColorPicker Grid.Column="1" Margin="4,0,0,0" Width="32" Height="32"
+                                     Color="{Binding CodeBlockText, Converter={StaticResource HexToColor}}"/>
+                    </Grid>
                 </StackPanel>
 
                 <!-- Row 3: Inline code -->
                 <StackPanel Grid.Row="3" Grid.Column="0" Spacing="2" Margin="0,0,8,8">
                     <TextBlock Text="Inline code background" FontSize="12" Opacity="0.7"/>
-                    <TextBox Text="{Binding InlineCodeBackground}" FontFamily="Consolas" FontSize="12"/>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox Text="{Binding InlineCodeBackground}" FontFamily="Consolas" FontSize="12"/>
+                        <ColorPicker Grid.Column="1" Margin="4,0,0,0" Width="32" Height="32"
+                                     Color="{Binding InlineCodeBackground, Converter={StaticResource HexToColor}}"/>
+                    </Grid>
                 </StackPanel>
                 <StackPanel Grid.Row="3" Grid.Column="1" Spacing="2" Margin="0,0,0,8">
                     <TextBlock Text="Inline code text" FontSize="12" Opacity="0.7"/>
-                    <TextBox Text="{Binding InlineCodeText}" FontFamily="Consolas" FontSize="12"/>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox Text="{Binding InlineCodeText}" FontFamily="Consolas" FontSize="12"/>
+                        <ColorPicker Grid.Column="1" Margin="4,0,0,0" Width="32" Height="32"
+                                     Color="{Binding InlineCodeText, Converter={StaticResource HexToColor}}"/>
+                    </Grid>
                 </StackPanel>
 
                 <!-- Row 4: System bubble -->
                 <StackPanel Grid.Row="4" Grid.Column="0" Spacing="2" Margin="0,0,8,8">
                     <TextBlock Text="System bubble background" FontSize="12" Opacity="0.7"/>
-                    <TextBox Text="{Binding SystemBubbleBackground}" FontFamily="Consolas" FontSize="12"/>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox Text="{Binding SystemBubbleBackground}" FontFamily="Consolas" FontSize="12"/>
+                        <ColorPicker Grid.Column="1" Margin="4,0,0,0" Width="32" Height="32"
+                                     Color="{Binding SystemBubbleBackground, Converter={StaticResource HexToColor}}"/>
+                    </Grid>
                 </StackPanel>
 
                 <!-- Row 5: Separator label for recency -->
@@ -102,17 +143,29 @@
                 <!-- Row 6: Recency colors -->
                 <StackPanel Grid.Row="6" Grid.Column="0" Spacing="2" Margin="0,0,8,8">
                     <TextBlock Text="Active (15 min)" FontSize="12" Opacity="0.7"/>
-                    <TextBox Text="{Binding Recency15MinBackground}" FontFamily="Consolas" FontSize="12"/>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox Text="{Binding Recency15MinBackground}" FontFamily="Consolas" FontSize="12"/>
+                        <ColorPicker Grid.Column="1" Margin="4,0,0,0" Width="32" Height="32"
+                                     Color="{Binding Recency15MinBackground, Converter={StaticResource HexToColor}}"/>
+                    </Grid>
                 </StackPanel>
                 <StackPanel Grid.Row="6" Grid.Column="1" Spacing="2" Margin="0,0,0,8">
                     <Grid ColumnDefinitions="*,*" Margin="0,0,0,0">
                         <StackPanel Grid.Column="0" Spacing="2" Margin="0,0,8,0">
                             <TextBlock Text="Recent (30 min)" FontSize="12" Opacity="0.7"/>
-                            <TextBox Text="{Binding Recency30MinBackground}" FontFamily="Consolas" FontSize="12"/>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBox Text="{Binding Recency30MinBackground}" FontFamily="Consolas" FontSize="12"/>
+                                <ColorPicker Grid.Column="1" Margin="4,0,0,0" Width="32" Height="32"
+                                             Color="{Binding Recency30MinBackground, Converter={StaticResource HexToColor}}"/>
+                            </Grid>
                         </StackPanel>
                         <StackPanel Grid.Column="1" Spacing="2">
                             <TextBlock Text="Past hour (60 min)" FontSize="12" Opacity="0.7"/>
-                            <TextBox Text="{Binding Recency60MinBackground}" FontFamily="Consolas" FontSize="12"/>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBox Text="{Binding Recency60MinBackground}" FontFamily="Consolas" FontSize="12"/>
+                                <ColorPicker Grid.Column="1" Margin="4,0,0,0" Width="32" Height="32"
+                                             Color="{Binding Recency60MinBackground, Converter={StaticResource HexToColor}}"/>
+                            </Grid>
                         </StackPanel>
                     </Grid>
                 </StackPanel>
