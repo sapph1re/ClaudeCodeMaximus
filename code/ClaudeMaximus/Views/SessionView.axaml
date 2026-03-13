@@ -89,9 +89,6 @@
                                             VerticalAlignment="Bottom"
                                             HorizontalAlignment="Left"
                                             Margin="4,0,8,2">
-                                    <TextBlock Text="{Binding FormattedDate}"
-                                               FontSize="9" Opacity="0.3"
-                                               HorizontalAlignment="Left"/>
                                     <TextBlock Text="{Binding FormattedTime}"
                                                FontSize="10" Opacity="0.35"
                                                HorizontalAlignment="Left"/>
