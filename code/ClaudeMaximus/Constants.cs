@@ -44,7 +44,22 @@ public static class Constants
 		public const string NewBranch = "Create a new git branch before committing your changes.";
 		public const string AutoDocument = "After completing the request, update any relevant requirements documents and/or architecture documents in the project's /docs directory to reflect the changes you made.";
 		public const string Clear = "After completing this request, please summarize the key outcomes and decisions from this session in a brief closing statement.";
-		public const string CompactionPrompt = "Please compact the conversation in this session. Preserve the user's prompts (you may rephrase them for brevity and clarity, but keep the attribution that specific instructions or knowledge came from the user). Focus on preserving: decisions made during development, the reasoning behind those decisions, architecture choices, and implementation details that matter. Remove transient information such as debugging steps, intermediate failed attempts, progress updates, and unnecessary verbosity. Output the compacted conversation maintaining the USER/ASSISTANT turn structure.";
+		public const string CompactionPrompt = """
+Please compact the conversation in this session. Preserve the user's prompts (you may rephrase them for brevity and clarity, but keep the attribution that specific instructions or knowledge came from the user). Focus on preserving: decisions made during development, the reasoning behind those decisions, architecture choices, and implementation details that matter. Remove transient information such as debugging steps, intermediate failed attempts, progress updates, and unnecessary verbosity.
+
+Output the compacted conversation in this EXACT format (no preamble, no wrapping text, start directly with the first entry):
+
+[2026-01-01T00:00:00Z] USER
+<compacted user prompt>
+
+[2026-01-01T00:00:00Z] ASSISTANT
+<compacted assistant response>
+
+[2026-01-01T00:00:00Z] USER
+<next compacted user prompt>
+
+...and so on. Use the original timestamps from the conversation. Each entry starts with a [timestamp] ROLE header line, followed by the content, followed by a blank line. Do NOT include any text before the first [timestamp] header or after the last entry.
+""";
 	}
 
 	public static class ClaudeSessions

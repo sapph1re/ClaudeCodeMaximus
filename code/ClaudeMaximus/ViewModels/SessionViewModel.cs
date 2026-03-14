@@ -566,13 +566,14 @@ public sealed class SessionViewModel : ViewModelBase
 		var compacted = compactedContent.ToString().Trim();
 		if (!string.IsNullOrEmpty(compacted))
 		{
-			// Build proper session file content: COMPACTION separator + ASSISTANT entry
+			// Write COMPACTION separator followed by the compacted conversation
+			// (Claude outputs entries in session file format: [timestamp] ROLE\ncontent\n)
 			var now = DateTimeOffset.UtcNow;
 			var fileContent = new StringBuilder();
 			fileContent.AppendLine($"[{now.ToString(Constants.SessionFile.TimestampFormat)}] {Constants.SessionFile.RoleCompaction}");
-			fileContent.AppendLine($"[{now.ToString(Constants.SessionFile.TimestampFormat)}] {Constants.SessionFile.RoleAssistant}");
 			fileContent.AppendLine(compacted);
-			fileContent.AppendLine();
+			if (!compacted.EndsWith(Environment.NewLine))
+				fileContent.AppendLine();
 
 			_fileService.RewriteSessionFile(_node.FileName, fileContent.ToString());
 
