@@ -59,6 +59,50 @@ public sealed class SessionFileService : ISessionFileService
 		File.Move(tmpPath, fullPath, overwrite: true);
 	}
 
+	public int RepairCorruptedCompactions()
+	{
+		var root = _appSettings.Settings.SessionFilesRoot;
+		if (string.IsNullOrEmpty(root) || !Directory.Exists(root))
+			return 0;
+
+		var repaired = 0;
+		foreach (var filePath in Directory.GetFiles(root, $"*{Constants.SessionFileExtension}"))
+		{
+			try
+			{
+				var content = File.ReadAllText(filePath, Encoding.UTF8).Trim();
+				if (string.IsNullOrEmpty(content))
+					continue;
+
+				var lines = File.ReadAllLines(filePath, Encoding.UTF8);
+				var entries = ParseEntries(lines);
+
+				// If the file has content but zero parseable entries, it's corrupted
+				if (entries.Count > 0)
+					continue;
+
+				// Wrap the raw text with proper session headers
+				var now = DateTimeOffset.UtcNow;
+				var sb = new StringBuilder();
+				sb.AppendLine(FormatHeader(now, Constants.SessionFile.RoleCompaction));
+				sb.AppendLine(FormatHeader(now, Constants.SessionFile.RoleAssistant));
+				sb.AppendLine(content);
+				sb.AppendLine();
+
+				var tmpPath = filePath + ".tmp";
+				File.WriteAllText(tmpPath, sb.ToString(), Encoding.UTF8);
+				File.Move(tmpPath, filePath, overwrite: true);
+				repaired++;
+			}
+			catch
+			{
+				// Skip files we can't process
+			}
+		}
+
+		return repaired;
+	}
+
 	private string GetFullPath(string fileName)
 		=> Path.Combine(_appSettings.Settings.SessionFilesRoot, fileName);
 

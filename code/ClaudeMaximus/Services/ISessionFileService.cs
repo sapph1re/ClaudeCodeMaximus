@@ -22,4 +22,10 @@ public interface ISessionFileService
 
 	/// <summary>Atomically rewrites the session file with new content (write .tmp then rename).</summary>
 	void RewriteSessionFile(string fileName, string content);
+
+	/// <summary>
+	/// Scans all session files and repairs any that were corrupted by the auto-compaction bug
+	/// (raw text without [timestamp] ROLE headers). Returns the count of repaired files.
+	/// </summary>
+	int RepairCorruptedCompactions();
 }

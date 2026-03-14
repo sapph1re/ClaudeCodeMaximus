@@ -124,6 +124,11 @@ public sealed class MainWindowViewModel : ViewModelBase
 		ToggleThemeCommand     = ReactiveCommand.Create(() => { IsDarkTheme = !IsDarkTheme; });
 		ClearSessionCommand    = ReactiveCommand.Create(() => { ActiveSession?.ClearCommand.Execute().Subscribe(); });
 
+		// Repair session files corrupted by the auto-compaction bug (one-time on startup)
+		var repaired = fileService.RepairCorruptedCompactions();
+		if (repaired > 0)
+			Serilog.Log.Information("Repaired {Count} session file(s) with corrupted compaction format", repaired);
+
 		// React to session selection changes
 		this.WhenAnyValue(x => x.SessionTree.SelectedSession)
 			.Subscribe(OnSelectedSessionChanged);
