@@ -117,19 +117,15 @@ public partial class MainWindow : Window
 		var isMaximized = WindowState == WindowState.Maximized;
 		ws.IsMaximized = isMaximized;
 
-		if (isMaximized)
-		{
-			// Persist the normal (restored) bounds so the window reopens correctly
-			// when the user un-maximizes. Avalonia exposes these via FrameSize is not
-			// available but we can read from the owner screen or keep whatever was
-			// saved before — only update position/size when NOT maximized.
-		}
-		else
+		// Always save position (needed to know which screen the window is on).
+		// Only save size when not maximized, so the normal/restored bounds are preserved.
+		ws.Left = Position.X;
+		ws.Top  = Position.Y;
+
+		if (!isMaximized)
 		{
 			ws.Width  = Width;
 			ws.Height = Height;
-			ws.Left   = Position.X;
-			ws.Top    = Position.Y;
 		}
 
 		ws.SplitterPosition = MainContentGrid.ColumnDefinitions[0].Width.Value;

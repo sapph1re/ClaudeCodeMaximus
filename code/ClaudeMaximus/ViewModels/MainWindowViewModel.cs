@@ -4,6 +4,7 @@ using System.Reactive;
 using System.Reactive.Linq;
 using ClaudeMaximus.Services;
 using ReactiveUI;
+using Serilog;
 
 namespace ClaudeMaximus.ViewModels;
 
@@ -195,11 +196,24 @@ public sealed class MainWindowViewModel : ViewModelBase
 	{
 		var savedFileName = _appSettings.Settings.ActiveSessionFileName;
 		if (string.IsNullOrEmpty(savedFileName))
+		{
+			Log.Debug("RestoreActiveSession: no saved ActiveSessionFileName");
 			return;
+		}
+
+		Log.Debug("RestoreActiveSession: looking for {FileName} in {DirCount} directories",
+			savedFileName, SessionTree.Directories.Count);
 
 		var node = FindSessionNode(savedFileName);
 		if (node != null)
+		{
+			Log.Debug("RestoreActiveSession: found node '{Name}', setting selection", node.Name);
 			SessionTree.SelectedSession = node;
+		}
+		else
+		{
+			Log.Warning("RestoreActiveSession: session node not found for {FileName}", savedFileName);
+		}
 	}
 
 	private SessionNodeViewModel? FindSessionNode(string fileName)
