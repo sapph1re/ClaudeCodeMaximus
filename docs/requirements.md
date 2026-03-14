@@ -77,6 +77,8 @@ This is equivalent to writing a custom terminal emulator or IDE plugin that runs
 
 **FR.2.3.1 — Message timestamps:** Each message bubble displays a timestamp. User messages show both date (`yyyy-MM-dd`) and time (`HH:mm`). Assistant messages show time only (`HH:mm`) — the date is omitted to reduce visual clutter.
 
+**FR.2.3.2 — Text selectability:** All rendered text in the output panel must be selectable (copy-able) by the user, including user prompts, assistant responses (both plain text and markdown mode), headings, list items, code blocks, and system messages. In markdown rendering mode, each block (heading, paragraph, code block, list item) is independently selectable. Cross-block selection (selecting across multiple blocks in a single drag) is not supported due to Avalonia platform limitations.
+
 **FR.2.4** The session view shall provide a multi-line input text box at the bottom for composing and submitting prompts to Claude Code. Submission is via `Ctrl+Enter` or a dedicated Send button.
 
 **FR.2.5** When Claude Code is running (processing a prompt), the input area shall be disabled and a visual busy indicator shown.

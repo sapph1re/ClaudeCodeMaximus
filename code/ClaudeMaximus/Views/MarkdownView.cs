@@ -25,6 +25,12 @@ public sealed class MarkdownView : ContentControl
 	public static readonly StyledProperty<string?> MarkdownProperty =
 		AvaloniaProperty.Register<MarkdownView, string?>(nameof(Markdown));
 
+	public static readonly StyledProperty<string?> HighlightTermProperty =
+		AvaloniaProperty.Register<MarkdownView, string?>(nameof(HighlightTerm));
+
+	public static readonly StyledProperty<bool> IsCurrentMatchProperty =
+		AvaloniaProperty.Register<MarkdownView, bool>(nameof(IsCurrentMatch));
+
 	private static readonly MarkdownPipeline Pipeline =
 		new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
 
@@ -44,15 +50,30 @@ public sealed class MarkdownView : ContentControl
 	private static IBrush InlineCodeBackground => GetResource(Services.ThemeApplicator.KeyInlineCodeBg, FallbackInlineCodeBg);
 	private static IBrush InlineCodeForeground => GetResource(Services.ThemeApplicator.KeyInlineCodeFg, FallbackInlineCodeFg);
 
+
 	public string? Markdown
 	{
 		get => GetValue(MarkdownProperty);
 		set => SetValue(MarkdownProperty, value);
 	}
 
+	public string? HighlightTerm
+	{
+		get => GetValue(HighlightTermProperty);
+		set => SetValue(HighlightTermProperty, value);
+	}
+
+	public bool IsCurrentMatch
+	{
+		get => GetValue(IsCurrentMatchProperty);
+		set => SetValue(IsCurrentMatchProperty, value);
+	}
+
 	static MarkdownView()
 	{
 		MarkdownProperty.Changed.AddClassHandler<MarkdownView>((v, _) => v.Rebuild());
+		HighlightTermProperty.Changed.AddClassHandler<MarkdownView>((v, _) => v.Rebuild());
+		IsCurrentMatchProperty.Changed.AddClassHandler<MarkdownView>((v, _) => v.Rebuild());
 	}
 
 	// Rebuild when FontSize changes so all text scales with Ctrl+scroll
@@ -93,8 +114,9 @@ public sealed class MarkdownView : ContentControl
 		Table table           => BuildTable(table),
 		ThematicBreakBlock    => new Separator { Margin = new Thickness(0, 4) },
 		ParagraphBlock p      => BuildParagraph(p),
+		HtmlBlock html        => BuildHtmlBlock(html),
 		LinkReferenceDefinitionGroup => new Panel(),
-		_                     => new TextBlock { Text = block.ToString(), TextWrapping = TextWrapping.Wrap, FontSize = FontSize },
+		_                     => new SelectableTextBlock { Text = block.ToString(), TextWrapping = TextWrapping.Wrap, FontSize = FontSize },
 	};
 
 	private Control BuildHeading(HeadingBlock h)
@@ -108,7 +130,7 @@ public sealed class MarkdownView : ContentControl
 			_ => (baseSize,     FontWeight.SemiBold),
 		};
 
-		var tb = new TextBlock
+		var tb = new SelectableTextBlock
 		{
 			FontSize     = size,
 			FontWeight   = weight,
@@ -133,15 +155,35 @@ public sealed class MarkdownView : ContentControl
 			CornerRadius = new CornerRadius(4),
 			Padding      = new Thickness(10, 8),
 			Margin       = new Thickness(0, 2),
-			Child        = new SelectableTextBlock
+			Child        = new HighlightTextBlock
 			{
-				Text         = text,
-				TextWrapping = TextWrapping.NoWrap,
-				FontFamily   = new FontFamily("Cascadia Code,Consolas,monospace"),
-				FontSize     = fontSize,
-				Foreground   = CodeBlockForeground,
+				Text           = text,
+				HighlightTerm  = HighlightTerm,
+				IsCurrentMatch = IsCurrentMatch,
+				TextWrapping   = TextWrapping.Wrap,
+				FontFamily     = new FontFamily("Cascadia Code,Consolas,monospace"),
+				FontSize       = fontSize,
+				Foreground     = CodeBlockForeground,
 			},
 		};
+	}
+
+	private Control BuildHtmlBlock(HtmlBlock html)
+	{
+		// Render raw HTML content as plain text (e.g., <compacted assistant conversation>)
+		var text = html.Lines.ToString().Trim();
+		if (string.IsNullOrEmpty(text))
+			return new Panel();
+
+		var tb = new SelectableTextBlock
+		{
+			TextWrapping = TextWrapping.Wrap,
+			FontSize     = FontSize,
+			FontStyle    = FontStyle.Italic,
+			Opacity      = 0.6,
+		};
+		AppendTextWithHighlight(tb.Inlines!, text);
+		return tb;
 	}
 
 	private Control BuildQuote(QuoteBlock quote)
@@ -173,7 +215,7 @@ public sealed class MarkdownView : ContentControl
 			row.ColumnDefinitions.Add(new ColumnDefinition(22, GridUnitType.Pixel));
 			row.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
 
-			var bulletBlock = new TextBlock
+			var bulletBlock = new SelectableTextBlock
 			{
 				Text                = bullet,
 				FontSize            = FontSize,
@@ -279,12 +321,28 @@ public sealed class MarkdownView : ContentControl
 
 	// ── Inline-level ─────────────────────────────────────────────────────────
 
+	private IBrush SearchHighlightBrush => IsCurrentMatch
+		? HighlightTextBlock.DefaultCurrentMatchBrush
+		: HighlightTextBlock.DefaultHighlightBrush;
+
+	private void AppendTextWithHighlight(InlineCollection col, string text)
+	{
+		var term = HighlightTerm;
+		if (string.IsNullOrEmpty(term))
+		{
+			col.Add(new Run { Text = text });
+			return;
+		}
+
+		HighlightTextBlock.BuildHighlightedInlines(col, text, term, SearchHighlightBrush);
+	}
+
 	private void AppendInline(InlineCollection col, Markdig.Syntax.Inlines.Inline inline)
 	{
 		switch (inline)
 		{
 			case LiteralInline lit:
-				col.Add(new Run { Text = lit.Content.ToString() });
+				AppendTextWithHighlight(col, lit.Content.ToString());
 				break;
 
 			case EmphasisInline em:
@@ -301,15 +359,33 @@ public sealed class MarkdownView : ContentControl
 				break;
 
 			case CodeInline code:
-				col.Add(new Run
+			{
+				var term = HighlightTerm;
+				if (!string.IsNullOrEmpty(term) && code.Content.Contains(term, StringComparison.OrdinalIgnoreCase))
 				{
-					Text       = code.Content,
-					FontFamily = new FontFamily("Cascadia Code,Consolas,monospace"),
-					Background = InlineCodeBackground,
-					Foreground = InlineCodeForeground,
-					FontSize   = Math.Max(FontSize - 1, 10),
-				});
+					var codeSpan = new Span
+					{
+						FontFamily = new FontFamily("Cascadia Code,Consolas,monospace"),
+						Background = InlineCodeBackground,
+						Foreground = InlineCodeForeground,
+						FontSize   = Math.Max(FontSize - 1, 10),
+					};
+					HighlightTextBlock.BuildHighlightedInlines(codeSpan.Inlines, code.Content, term, SearchHighlightBrush);
+					col.Add(codeSpan);
+				}
+				else
+				{
+					col.Add(new Run
+					{
+						Text       = code.Content,
+						FontFamily = new FontFamily("Cascadia Code,Consolas,monospace"),
+						Background = InlineCodeBackground,
+						Foreground = InlineCodeForeground,
+						FontSize   = Math.Max(FontSize - 1, 10),
+					});
+				}
 				break;
+			}
 
 			case LineBreakInline lb:
 				col.Add(lb.IsHard ? new LineBreak() : new Run { Text = " " });
