@@ -12,8 +12,7 @@ namespace ClaudeMaximus.Services;
 /// </summary>
 public class SelfUpdateService : ISelfUpdateService
 {
-	private const string AssemblyFileName    = "ClaudeMaximus.dll";
-	private const int    MaxRetries          = 10;
+	private const string AssemblyFileName = "ClaudeMaximus.dll";
 
 	private static readonly int[] RetryDelays = { 1, 2, 4, 8, 16, 32, 64 };
 
@@ -21,52 +20,51 @@ public class SelfUpdateService : ISelfUpdateService
 	{
 		try
 		{
-			var publishDir  = AppContext.BaseDirectory.TrimEnd('\\', '/');
-			var solutionRoot = FindSolutionRoot(publishDir);
+			var runningDir   = AppContext.BaseDirectory.TrimEnd('\\', '/');
+			var solutionRoot = FindSolutionRoot(runningDir);
 
 			if (solutionRoot == null)
 			{
-				Log.Information("SelfUpdateService: solution root not found from {PublishDir}, skipping.", publishDir);
+				Log.Information("SelfUpdate: solution root not found from {RunningDir}, skipping.", runningDir);
 				return;
 			}
 
-			Log.Information("SelfUpdateService: solution root = {SolutionRoot}", solutionRoot);
+			Log.Information("SelfUpdate: solution root = {SolutionRoot}, running from = {RunningDir}", solutionRoot, runningDir);
 
-			// The .sln sits next to the project folder, so bin/Debug is a direct child path
-			var sourceDir  = FindBuildOutputDir(solutionRoot);
+			var sourceDir = FindNewestBuildOutputDir(solutionRoot, runningDir);
 			if (sourceDir == null)
 			{
-				Log.Information("SelfUpdateService: could not locate bin/Debug/net* output under {SolutionRoot}", solutionRoot);
+				Log.Information("SelfUpdate: no build output directory found under {SolutionRoot}", solutionRoot);
 				return;
 			}
 
-			var sourceDll  = Path.Combine(sourceDir,   AssemblyFileName);
-			var publishDll = Path.Combine(publishDir,  AssemblyFileName);
+			var sourceDll  = Path.Combine(sourceDir,  AssemblyFileName);
+			var runningDll = Path.Combine(runningDir, AssemblyFileName);
 
-			Log.Information("SelfUpdateService: sourceDir = {SourceDir}, publishDir = {PublishDir}", sourceDir, publishDir);
+			Log.Information("SelfUpdate: candidate sourceDir = {SourceDir}", sourceDir);
 
-			if (!File.Exists(sourceDll))
+			if (!File.Exists(runningDll))
 			{
-				Log.Information("SelfUpdateService: source dll not found: {SourceDll}", sourceDll);
+				Log.Information("SelfUpdate: running dll not found: {RunningDll}, spawning copy anyway.", runningDll);
+				SpawnCopyProcess(sourceDir, runningDir);
 				return;
 			}
 
-			if (File.Exists(publishDll)
-				&& File.GetLastWriteTimeUtc(sourceDll) <= File.GetLastWriteTimeUtc(publishDll))
+			var srcTime = File.GetLastWriteTimeUtc(sourceDll);
+			var runTime = File.GetLastWriteTimeUtc(runningDll);
+
+			if (srcTime <= runTime)
 			{
-				Log.Information("SelfUpdateService: publish is up-to-date. Source={SrcTime}, Publish={PubTime}",
-					File.GetLastWriteTimeUtc(sourceDll), File.GetLastWriteTimeUtc(publishDll));
+				Log.Information("SelfUpdate: running copy is up-to-date. Source={SrcTime}, Running={RunTime}", srcTime, runTime);
 				return;
 			}
 
-			Log.Information("SelfUpdateService: newer build detected, spawning copy. Source={SrcTime}, Publish={PubTime}",
-				File.GetLastWriteTimeUtc(sourceDll),
-				File.Exists(publishDll) ? File.GetLastWriteTimeUtc(publishDll) : "(missing)");
-			SpawnCopyProcess(sourceDir, publishDir);
+			Log.Information("SelfUpdate: newer build detected, spawning copy. Source={SrcTime}, Running={RunTime}", srcTime, runTime);
+			SpawnCopyProcess(sourceDir, runningDir);
 		}
 		catch (Exception ex)
 		{
-			Log.Error(ex, "SelfUpdateService: unexpected error during update check.");
+			Log.Error(ex, "SelfUpdate: unexpected error during update check.");
 		}
 	}
 
@@ -86,29 +84,44 @@ public class SelfUpdateService : ISelfUpdateService
 	}
 
 	/// <summary>
-	/// Finds the bin/Debug/net* output directory by searching for the assembly DLL
-	/// under the solution root. This avoids hardcoding a relative path that can break
-	/// depending on where the .sln file sits relative to the project folder.
+	/// Finds the directory containing the newest ClaudeMaximus.dll under the solution root,
+	/// excluding the running directory itself and test project directories.
 	/// </summary>
-	private static string? FindBuildOutputDir(string solutionRoot)
+	private static string? FindNewestBuildOutputDir(string solutionRoot, string runningDir)
 	{
-		// Look for ClaudeMaximus.dll in any bin/Debug/net* folder under the solution root
 		try
 		{
 			var candidates = Directory.GetFiles(solutionRoot, AssemblyFileName, SearchOption.AllDirectories);
+			string? bestDir = null;
+			DateTime bestTime = DateTime.MinValue;
+
 			foreach (var candidate in candidates)
 			{
 				var dir = Path.GetDirectoryName(candidate)!;
-				// Must be under a bin\Debug path (not publish, not test project)
-				if (dir.Contains(Path.Combine("bin", "Debug"), StringComparison.OrdinalIgnoreCase)
-					&& !dir.Contains("Tests", StringComparison.OrdinalIgnoreCase)
-					&& !dir.Contains("publish", StringComparison.OrdinalIgnoreCase))
-					return dir;
+
+				// Skip the directory we're running from
+				if (dir.Equals(runningDir, StringComparison.OrdinalIgnoreCase))
+					continue;
+
+				// Skip test project output
+				if (dir.Contains("Tests", StringComparison.OrdinalIgnoreCase))
+					continue;
+
+				var writeTime = File.GetLastWriteTimeUtc(candidate);
+				Log.Debug("SelfUpdate: found candidate {Dir}, modified {Time}", dir, writeTime);
+
+				if (writeTime > bestTime)
+				{
+					bestTime = writeTime;
+					bestDir = dir;
+				}
 			}
+
+			return bestDir;
 		}
 		catch (Exception ex)
 		{
-			Log.Warning(ex, "SelfUpdateService: error searching for build output under {Root}", solutionRoot);
+			Log.Warning(ex, "SelfUpdate: error searching for build output under {Root}", solutionRoot);
 		}
 
 		return null;
@@ -117,7 +130,7 @@ public class SelfUpdateService : ISelfUpdateService
 	private static void SpawnCopyProcess(string sourceDir, string destDir)
 	{
 		var scriptPath = Path.Combine(Path.GetTempPath(), "ClaudeMaximus_update.ps1");
-		File.WriteAllText(scriptPath, BuildScript(sourceDir, destDir, MaxRetries, RetryDelays));
+		File.WriteAllText(scriptPath, BuildScript(sourceDir, destDir, RetryDelays));
 
 		var psi = new ProcessStartInfo
 		{
@@ -130,19 +143,17 @@ public class SelfUpdateService : ISelfUpdateService
 		Process.Start(psi);
 	}
 
-	private static string BuildScript(string sourceDir, string destDir, int maxRetries, int[] delays)
+	private static string BuildScript(string sourceDir, string destDir, int[] delays)
 	{
-		// Escape any single-quotes that might appear in path strings inside the PS script.
 		var src  = sourceDir.Replace("'", "''");
 		var dst  = destDir.Replace("'", "''");
 
 		return
-@$"$source     = '{src}'
-$dest       = '{dst}'
-$maxRetries = {maxRetries}
-$delays     = @({string.Join(", ", delays)})
+@$"$source = '{src}'
+$dest   = '{dst}'
+$delays = @({string.Join(", ", delays)})
 
-for ($i = 0; $i -lt $maxRetries; $i++) {{
+for ($i = 0; $i -lt $delays.Length; $i++) {{
     try {{
         $files = Get-ChildItem -Path $source -File
         foreach ($file in $files) {{
@@ -150,14 +161,15 @@ for ($i = 0; $i -lt $maxRetries; $i++) {{
             Copy-Item -Path $file.FullName -Destination $destFile -Force
         }}
         Write-Host 'ClaudeMaximus update: copy complete.'
-        break
+        exit 0
     }} catch {{
-        $delay = if ($i -lt $delays.Length) {{ $delays[$i] }} else {{ 64 }}
+        $delay = $delays[$i]
         $msg   = $_.Exception.Message
-        Write-Host ""ClaudeMaximus update: attempt $($i + 1) failed — $msg. Retrying in ${{delay}}s...""
+        Write-Host ""ClaudeMaximus update: attempt $($i + 1) failed - $msg. Retrying in $($delay)s...""
         Start-Sleep -Seconds $delay
     }}
 }}
+Write-Host 'ClaudeMaximus update: all attempts exhausted.'
 ";
 	}
 }

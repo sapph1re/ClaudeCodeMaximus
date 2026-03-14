@@ -234,9 +234,9 @@ Maximum 15 results displayed.
 
 ### FR.8 — Self-Update on Exit
 
-**FR.8.1** On application exit, the app checks whether a newer build exists in the solution's `bin\Debug\net9.0` directory (compared to the running publish directory). If a newer build is detected, a PowerShell script is spawned as a detached process to copy the updated files after the app has fully exited.
+**FR.8.1** The application runs from a directory that is different from the build output directory. On application exit, the app locates the solution root (by walking up the directory tree from its own base directory looking for a `*.sln` file). It then searches for the newest `ClaudeMaximus.dll` under the solution root, excluding the app's own running directory and test project directories. If a newer build is found (by comparing file timestamps), a PowerShell script is spawned as a detached process to copy the updated files into the running directory after the app has fully exited.
 
-**FR.8.2** The copy script retries with exponential backoff (up to 10 attempts) in case files are still locked during shutdown.
+**FR.8.2** The copy script retries with progressive backoff delays of 1, 2, 4, 8, 16, 32, and 64 seconds (7 attempts total). If all attempts fail, the script exits silently.
 
 **FR.8.3** If no solution root is found (e.g., running from a standalone publish), the update check is silently skipped.
 
