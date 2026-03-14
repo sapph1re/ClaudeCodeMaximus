@@ -8,4 +8,5 @@ public sealed class WindowStateModel
 	public double Left { get; set; } = 100;
 	public double Top { get; set; } = 100;
 	public double SplitterPosition { get; set; } = 280;
+	public bool IsMaximized { get; set; }
 }

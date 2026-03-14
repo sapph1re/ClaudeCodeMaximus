@@ -129,7 +129,7 @@ Subsequent messages continue after the separator. The full pre-compaction histor
 - Theme selection: Dark or Light (radio buttons)
 - Per-theme color customization (see FR.9)
 
-**FR.4.5** Application window state (size, position, left-panel splitter position) is also persisted in `appsettings.json` and restored on next launch.
+**FR.4.5** Application window state (size, position, left-panel splitter position, and maximized state) is also persisted in `appsettings.json` and restored on next launch. When the window is closed while maximized, the normal (restored) bounds are preserved so un-maximizing restores the previous size and position. The saved position is validated against connected screens on startup; if the saved center point is off-screen, the window is centered on the primary display.
 
 **FR.4.6 — Session state persistence:** The following per-session and global UI state is persisted in `appsettings.json` and restored on next launch:
 - **Active session selection:** the file name of the last selected session, so reopening the app returns to the same session.
@@ -234,7 +234,7 @@ Maximum 15 results displayed.
 
 ### FR.8 — Self-Update on Exit
 
-**FR.8.1** The application runs from a directory that is different from the build output directory. On application exit, the app locates the solution root (by walking up the directory tree from its own base directory looking for a `*.sln` file). It then searches for the newest `ClaudeMaximus.dll` under the solution root, excluding the app's own running directory and test project directories. If a newer build is found (by comparing file timestamps), a PowerShell script is spawned as a detached process to copy the updated files into the running directory after the app has fully exited.
+**FR.8.1** The application runs from any arbitrary directory (typically `/publish`). On application exit, the app locates the solution root (by walking up the directory tree from its own base directory looking for a `*.sln` file). It then finds the ClaudeMaximus project directory (via `ClaudeMaximus.csproj`) and checks its standard build output at `bin/Debug/net9.0/` for a newer `ClaudeMaximus.dll`, excluding the app's own running directory and test project directories. If a newer build is found (by comparing file timestamps), a PowerShell script is spawned as a detached process to copy the updated files into the running directory after the app has fully exited.
 
 **FR.8.2** The copy script retries with progressive backoff delays of 1, 2, 4, 8, 16, 32, and 64 seconds (7 attempts total). If all attempts fail, the script exits silently.
 
@@ -279,7 +279,16 @@ Recency bars refresh automatically every 60 seconds so the visual state stays cu
 - Previous (`<`) and Next (`>`) navigation buttons
 - A Close (`X`) button that dismisses the search (same as Escape)
 
-**FR.10.4 — Match highlighting:** Matched messages are scrolled into view when navigating. The search is case-insensitive and matches against message content text.
+**FR.10.4 — Match highlighting:** Matched messages are scrolled into view when navigating. The search is case-insensitive and matches against message content text. While a search is active, all occurrences of the search term within message content are highlighted with a yellow background (semi-transparent `#B4FFFF00`). The currently selected match message uses an orange background (`#DCFFA500`) to distinguish it from other matches. Highlighting applies to:
+- User message text (plain text)
+- Assistant message text (both plain text and markdown rendering modes, including within code blocks and inline code)
+- System message text
+
+**FR.10.5 — Precise scroll positioning:** When navigating to a match, the output area scrolls to position the matched text at approximately 25% from the top of the viewport, rather than merely scrolling the message bubble into view. This ensures the matched text is visible with context above and more content below.
+
+**FR.10.6 — Re-search on text change:** When the user modifies the search text while a search is active and presses Enter, a new search is performed with the updated text instead of navigating within the old search results.
+
+Highlighting is implemented via `HighlightTextBlock` (extends `SelectableTextBlock`) which splits text at match boundaries and renders matches as `Run` elements with yellow background. `MarkdownView` accepts a `HighlightTerm` styled property and applies the same highlighting within its inline rendering. Highlighting is cleared when the search is dismissed.
 
 **FR.10.5 — Dismissal behavior:** Closing the search overlay (via `X` button or `Escape` key) hides the overlay and clears any match highlighting, but does **not** clear the search text from the search box.
 

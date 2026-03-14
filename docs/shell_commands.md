@@ -5,7 +5,7 @@
 
 ## dotnet build — app is always running (exe and dll locked)
 
-ClaudeMaximus is always running when Claude Code is active (the session IS the app). The running process locks both `ClaudeMaximus.exe` and `ClaudeMaximus.dll` in `bin\Debug\net9.0\`, so a normal build always fails.
+ClaudeMaximus is always running when Claude Code is active (the session IS the app). The app does **not** run from `bin\Debug\net9.0\` — it runs from an arbitrary directory (typically `/publish`) where updated binaries are copied by the self-update mechanism on exit (see FR.8 in `requirements.md`). The standard build output is `code/ClaudeMaximus/bin/Debug/net9.0/`. Both the running directory and `bin\Debug\net9.0\` have locked DLLs during development, so a normal build always fails. Do NOT use the `Tempcmx-build` folder — it is deprecated and non-functional.
 
 **Fix:** always redirect output to a temp directory:
 ```

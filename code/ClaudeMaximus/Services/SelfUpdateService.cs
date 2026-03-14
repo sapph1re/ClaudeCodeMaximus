@@ -84,27 +84,37 @@ public class SelfUpdateService : ISelfUpdateService
 	}
 
 	/// <summary>
-	/// Finds the directory containing the newest ClaudeMaximus.dll under the solution root,
-	/// excluding the running directory itself and test project directories.
+	/// Finds the standard build output directory (bin/Debug/net9.0) under the solution root
+	/// that contains ClaudeMaximus.dll, excluding the running directory itself.
 	/// </summary>
 	private static string? FindNewestBuildOutputDir(string solutionRoot, string runningDir)
 	{
 		try
 		{
-			var candidates = Directory.GetFiles(solutionRoot, AssemblyFileName, SearchOption.AllDirectories);
+			// Look for .csproj files to find project directories, then check their bin/Debug/net9.0
+			var csprojFiles = Directory.GetFiles(solutionRoot, "ClaudeMaximus.csproj", SearchOption.AllDirectories);
+
 			string? bestDir = null;
 			DateTime bestTime = DateTime.MinValue;
 
-			foreach (var candidate in candidates)
+			foreach (var csproj in csprojFiles)
 			{
-				var dir = Path.GetDirectoryName(candidate)!;
+				var projectDir = Path.GetDirectoryName(csproj)!;
+
+				// Skip test projects
+				if (projectDir.Contains("Tests", StringComparison.OrdinalIgnoreCase))
+					continue;
+
+				var binDebugDir = Path.Combine(projectDir, "bin", "Debug", "net9.0");
+				var candidate = Path.Combine(binDebugDir, AssemblyFileName);
+
+				if (!File.Exists(candidate))
+					continue;
+
+				var dir = binDebugDir;
 
 				// Skip the directory we're running from
 				if (dir.Equals(runningDir, StringComparison.OrdinalIgnoreCase))
-					continue;
-
-				// Skip test project output
-				if (dir.Contains("Tests", StringComparison.OrdinalIgnoreCase))
 					continue;
 
 				var writeTime = File.GetLastWriteTimeUtc(candidate);

@@ -19,6 +19,8 @@ public partial class MainWindow : Window
 	private bool _closeConfirmed;
 	private PixelPoint? _pendingPosition;
 
+	private bool _pendingMaximized;
+
 	public MainWindow()
 	{
 		InitializeComponent();
@@ -28,6 +30,7 @@ public partial class MainWindow : Window
 
 		Width  = ws.Width;
 		Height = ws.Height;
+		_pendingMaximized = ws.IsMaximized;
 
 		MainContentGrid.ColumnDefinitions[0].Width = new GridLength(
 			Math.Clamp(ws.SplitterPosition, 180, 600));
@@ -48,6 +51,10 @@ public partial class MainWindow : Window
 			Position = _pendingPosition.Value;
 			_pendingPosition = null;
 		}
+
+		// Restore maximized state after position is set so RestoreBounds are correct
+		if (_pendingMaximized)
+			WindowState = WindowState.Maximized;
 
 		// Restore active session selection now that the tree UI is ready
 		if (DataContext is MainWindowViewModel vm)
@@ -107,11 +114,25 @@ public partial class MainWindow : Window
 		var settings = App.Services.GetRequiredService<IAppSettingsService>();
 		var ws       = settings.Settings.Window;
 
-		ws.Width             = Width;
-		ws.Height            = Height;
-		ws.Left              = Position.X;
-		ws.Top               = Position.Y;
-		ws.SplitterPosition  = MainContentGrid.ColumnDefinitions[0].Width.Value;
+		var isMaximized = WindowState == WindowState.Maximized;
+		ws.IsMaximized = isMaximized;
+
+		if (isMaximized)
+		{
+			// Persist the normal (restored) bounds so the window reopens correctly
+			// when the user un-maximizes. Avalonia exposes these via FrameSize is not
+			// available but we can read from the owner screen or keep whatever was
+			// saved before — only update position/size when NOT maximized.
+		}
+		else
+		{
+			ws.Width  = Width;
+			ws.Height = Height;
+			ws.Left   = Position.X;
+			ws.Top    = Position.Y;
+		}
+
+		ws.SplitterPosition = MainContentGrid.ColumnDefinitions[0].Width.Value;
 
 		settings.Save();
 
