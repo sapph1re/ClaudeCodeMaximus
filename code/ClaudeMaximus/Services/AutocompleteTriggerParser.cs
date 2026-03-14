@@ -5,6 +5,8 @@ namespace ClaudeMaximus.Services;
 /// <remarks>Created by Claude</remarks>
 public sealed class AutocompleteTriggerParser
 {
+	private const int MaxPathLength = 260;
+
 	private static readonly AutocompleteTriggerModel _none = new()
 	{
 		Mode = AutocompleteMode.None,
@@ -18,13 +20,13 @@ public sealed class AutocompleteTriggerParser
 		if (string.IsNullOrEmpty(text) || caretIndex <= 0 || caretIndex > text.Length)
 			return _none;
 
-		// Check for filesystem path trigger first (e.g. C:\Users\...)
-		var pathResult = TryParsePath(text, caretIndex);
-		if (pathResult != null)
-			return pathResult;
+		// Check for # / ## triggers first — they are unambiguous delimiters
+		var hashResult = TryParseHash(text, caretIndex);
+		if (hashResult.Mode != AutocompleteMode.None)
+			return hashResult;
 
-		// Then check for # / ## triggers
-		return TryParseHash(text, caretIndex);
+		// Then check for filesystem path trigger (e.g. C:\Users\...)
+		return TryParsePath(text, caretIndex) ?? _none;
 	}
 
 	private AutocompleteTriggerModel? TryParsePath(string text, int caretIndex)
@@ -63,7 +65,11 @@ public sealed class AutocompleteTriggerParser
 					continue;
 			}
 
-			var segment = text.Substring(i, caretIndex - i);
+			var segmentLength = caretIndex - i;
+			if (segmentLength > MaxPathLength)
+				continue;
+
+			var segment = text.Substring(i, segmentLength);
 			return new AutocompleteTriggerModel
 			{
 				Mode = AutocompleteMode.Path,
