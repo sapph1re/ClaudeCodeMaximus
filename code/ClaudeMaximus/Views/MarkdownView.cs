@@ -3,6 +3,7 @@ using System.Text;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Markdig;
@@ -33,6 +34,9 @@ public sealed class MarkdownView : ContentControl
 
 	private static readonly MarkdownPipeline Pipeline =
 		new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
+
+	private static readonly Cursor IBeamCursor = new(StandardCursorType.Ibeam);
+	private static readonly IBrush SelectionHighlightBrush = new SolidColorBrush(Color.FromArgb(128, 0, 120, 215));
 
 	// Fallback code colours — overridden at runtime by ThemeApplicator via dynamic resources
 	private static readonly IBrush FallbackCodeBlockBg  = new SolidColorBrush(Color.FromRgb(245, 245, 245));
@@ -116,7 +120,7 @@ public sealed class MarkdownView : ContentControl
 		ParagraphBlock p      => BuildParagraph(p),
 		HtmlBlock html        => BuildHtmlBlock(html),
 		LinkReferenceDefinitionGroup => new Panel(),
-		_                     => new SelectableTextBlock { Text = block.ToString(), TextWrapping = TextWrapping.Wrap, FontSize = FontSize },
+		_                     => new SelectableTextBlock { Text = block.ToString(), TextWrapping = TextWrapping.Wrap, FontSize = FontSize, Cursor = IBeamCursor, SelectionBrush = SelectionHighlightBrush },
 	};
 
 	private Control BuildHeading(HeadingBlock h)
@@ -132,10 +136,12 @@ public sealed class MarkdownView : ContentControl
 
 		var tb = new SelectableTextBlock
 		{
-			FontSize     = size,
-			FontWeight   = weight,
-			TextWrapping = TextWrapping.Wrap,
-			Margin       = new Thickness(0, h.Level == 1 ? 8 : 4, 0, 2),
+			FontSize       = size,
+			FontWeight     = weight,
+			TextWrapping   = TextWrapping.Wrap,
+			Margin         = new Thickness(0, h.Level == 1 ? 8 : 4, 0, 2),
+			Cursor         = IBeamCursor,
+			SelectionBrush = SelectionHighlightBrush,
 		};
 
 		if (h.Inline != null)
@@ -177,10 +183,12 @@ public sealed class MarkdownView : ContentControl
 
 		var tb = new SelectableTextBlock
 		{
-			TextWrapping = TextWrapping.Wrap,
-			FontSize     = FontSize,
-			FontStyle    = FontStyle.Italic,
-			Opacity      = 0.6,
+			TextWrapping   = TextWrapping.Wrap,
+			FontSize       = FontSize,
+			FontStyle      = FontStyle.Italic,
+			Opacity        = 0.6,
+			Cursor         = IBeamCursor,
+			SelectionBrush = SelectionHighlightBrush,
 		};
 		AppendTextWithHighlight(tb.Inlines!, text);
 		return tb;
@@ -222,6 +230,8 @@ public sealed class MarkdownView : ContentControl
 				VerticalAlignment   = VerticalAlignment.Top,
 				HorizontalAlignment = HorizontalAlignment.Right,
 				Margin              = new Thickness(0, 0, 6, 0),
+				Cursor              = IBeamCursor,
+				SelectionBrush      = SelectionHighlightBrush,
 			};
 
 			var contentPanel = new StackPanel { Spacing = 3 };
@@ -240,7 +250,7 @@ public sealed class MarkdownView : ContentControl
 
 	private Control BuildParagraph(ParagraphBlock p)
 	{
-		var tb = new SelectableTextBlock { TextWrapping = TextWrapping.Wrap, FontSize = FontSize };
+		var tb = new SelectableTextBlock { TextWrapping = TextWrapping.Wrap, FontSize = FontSize, Cursor = IBeamCursor, SelectionBrush = SelectionHighlightBrush };
 
 		if (p.Inline != null)
 			foreach (var inline in p.Inline)
@@ -281,8 +291,10 @@ public sealed class MarkdownView : ContentControl
 				// Build cell text from its paragraph children
 				var tb = new SelectableTextBlock
 				{
-					TextWrapping = TextWrapping.Wrap,
-					FontSize     = FontSize,
+					TextWrapping   = TextWrapping.Wrap,
+					FontSize       = FontSize,
+					Cursor         = IBeamCursor,
+					SelectionBrush = SelectionHighlightBrush,
 				};
 				if (row.IsHeader) tb.FontWeight = FontWeight.SemiBold;
 

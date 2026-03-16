@@ -23,6 +23,7 @@ public partial class SessionView : UserControl
 	private DispatcherTimer? _autocompleteDebounce;
 	private bool _isAtBottom = true;
 	private MessageEntryViewModel? _subscribedProgressMsg;
+	private CrossBlockSelectionHandler? _crossBlockSelection;
 
 	/// <summary>Threshold in pixels — if within this distance of the bottom, consider "at bottom".</summary>
 	private const double AtBottomThreshold = 30;
@@ -44,6 +45,9 @@ public partial class SessionView : UserControl
 		SearchPrevBtn.Click  += (_, _) => NavigateSearch(forward: false);
 		SearchNextBtn.Click  += (_, _) => NavigateSearch(forward: true);
 		SearchCloseBtn.Click += (_, _) => DismissSearch();
+
+		// Cross-block text selection (works in both text and markdown modes)
+		_crossBlockSelection = new CrossBlockSelectionHandler(MessageScroller);
 
 		// Track whether user is at the bottom of the scroller for auto-scroll
 		MessageScroller.ScrollChanged += OnScrollChanged;
@@ -261,12 +265,14 @@ public partial class SessionView : UserControl
 			return;
 
 		var search = vm.OutputSearchVm;
+		var searchText = OutputSearchBox.Text ?? string.Empty;
 		int msgIndex;
 
-		if (!search.IsActive)
+		if (!search.IsActive ||
+		    !string.Equals(searchText, search.ActiveSearchTerm, StringComparison.Ordinal))
 		{
-			// First search or re-search after dismiss
-			msgIndex = search.Search(OutputSearchBox.Text ?? string.Empty);
+			// First search, re-search after dismiss, or search text changed
+			msgIndex = search.Search(searchText);
 		}
 		else
 		{
@@ -274,7 +280,7 @@ public partial class SessionView : UserControl
 		}
 
 		if (msgIndex >= 0)
-			ScrollToMessageIndex(msgIndex);
+			ScrollToMatchInMessage(msgIndex, searchText);
 	}
 
 	private void DismissSearch()
@@ -283,15 +289,59 @@ public partial class SessionView : UserControl
 			vm.OutputSearchVm.Dismiss();
 	}
 
-	private void ScrollToMessageIndex(int index)
+	private void ScrollToMatchInMessage(int messageIndex, string searchTerm)
 	{
-		// Defer so layout has a chance to update
+		// Defer so layout has a chance to update after highlight rebuilds
 		Dispatcher.UIThread.Post(() =>
 		{
-			var container = MessageList.ContainerFromIndex(index);
-			if (container is Control ctrl)
-				ctrl.BringIntoView();
+			var container = MessageList.ContainerFromIndex(messageIndex);
+			if (container is not Control ctrl) return;
+
+			// First, ensure the container is measured/arranged
+			ctrl.BringIntoView();
+
+			// Then schedule a second pass to do precise positioning
+			Dispatcher.UIThread.Post(() => ScrollToPreciseMatch(ctrl, messageIndex, searchTerm),
+				DispatcherPriority.Background);
 		}, DispatcherPriority.Background);
+	}
+
+	private void ScrollToPreciseMatch(Control container, int messageIndex, string searchTerm)
+	{
+		if (DataContext is not SessionViewModel vm) return;
+
+		// Get the message content to estimate where the match is within the container
+		if (messageIndex < 0 || messageIndex >= vm.Messages.Count) return;
+		var msg = vm.Messages[messageIndex];
+		var content = msg.Content;
+		if (string.IsNullOrEmpty(content) || string.IsNullOrEmpty(searchTerm)) return;
+
+		var matchCharIndex = content.IndexOf(searchTerm, StringComparison.OrdinalIgnoreCase);
+		if (matchCharIndex < 0) return;
+
+		// Get container position relative to the scroll content
+		var transform = container.TransformToVisual(MessageScroller);
+		if (transform == null) return;
+
+		var containerTopInViewport = transform.Value.Transform(new Point(0, 0)).Y;
+		var containerHeight = container.Bounds.Height;
+		var viewportHeight = MessageScroller.Viewport.Height;
+
+		// Estimate the vertical position of the match within the container
+		// based on character position ratio
+		double matchRatio = content.Length > 0 ? (double)matchCharIndex / content.Length : 0;
+		double estimatedMatchY = containerTopInViewport + (matchRatio * containerHeight);
+
+		// Target: put the match at 25% from the top of the viewport
+		double targetViewportY = viewportHeight * 0.25;
+		double scrollDelta = estimatedMatchY - targetViewportY;
+		double newOffset = MessageScroller.Offset.Y + scrollDelta;
+
+		// Clamp to valid range
+		var maxOffset = MessageScroller.Extent.Height - viewportHeight;
+		newOffset = Math.Clamp(newOffset, 0, Math.Max(0, maxOffset));
+
+		MessageScroller.Offset = new Avalonia.Vector(0, newOffset);
 	}
 
 	private void OnScrollerWheel(object? sender, PointerWheelEventArgs e)
