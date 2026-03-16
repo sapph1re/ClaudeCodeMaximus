@@ -68,7 +68,9 @@
                                             <TextBlock Text="You" FontSize="11"
                                                        Foreground="{DynamicResource CmxUserBubbleFg}"
                                                        Opacity="0.6" Margin="0,0,0,3"/>
-                                            <SelectableTextBlock Text="{Binding Content}"
+                                            <views:HighlightTextBlock Text="{Binding Content}"
+                                                                 HighlightTerm="{Binding DataContext.OutputSearchVm.ActiveSearchTerm, ElementName=Root}"
+                                                                 IsCurrentMatch="{Binding IsCurrentSearchMatch}"
                                                                  TextWrapping="Wrap"
                                                                  Foreground="{DynamicResource CmxUserBubbleFg}"
                                                                  FontFamily="Cascadia Code,Consolas,monospace"
@@ -87,10 +89,14 @@
                                         <views:MarkdownView
                                             IsVisible="{Binding DataContext.IsMarkdownMode, ElementName=Root}"
                                             Markdown="{Binding Content}"
+                                            HighlightTerm="{Binding DataContext.OutputSearchVm.ActiveSearchTerm, ElementName=Root}"
+                                            IsCurrentMatch="{Binding IsCurrentSearchMatch}"
                                             FontSize="{Binding DataContext.AssistantMarkdownFontSize, ElementName=Root}"/>
-                                        <SelectableTextBlock
+                                        <views:HighlightTextBlock
                                             IsVisible="{Binding !DataContext.IsMarkdownMode, ElementName=Root}"
                                             Text="{Binding Content}"
+                                            HighlightTerm="{Binding DataContext.OutputSearchVm.ActiveSearchTerm, ElementName=Root}"
+                                            IsCurrentMatch="{Binding IsCurrentSearchMatch}"
                                             TextWrapping="Wrap"
                                             FontFamily="Cascadia Code,Consolas,monospace"
                                             FontSize="{Binding DataContext.AssistantFontSize, ElementName=Root}"/>
@@ -108,7 +114,10 @@
                                 <!-- System message -->
                                 <Border IsVisible="{Binding IsSystem}" Margin="20,4,20,4" Padding="8,5" CornerRadius="4"
                                         Background="{DynamicResource CmxSystemBubbleBg}">
-                                    <SelectableTextBlock Text="{Binding Content}" TextWrapping="Wrap" FontSize="12" Opacity="0.7" FontStyle="Italic"/>
+                                    <views:HighlightTextBlock Text="{Binding Content}"
+                                                              HighlightTerm="{Binding DataContext.OutputSearchVm.ActiveSearchTerm, ElementName=Root}"
+                                                              IsCurrentMatch="{Binding IsCurrentSearchMatch}"
+                                                              TextWrapping="Wrap" FontSize="12" Opacity="0.7" FontStyle="Italic"/>
                                 </Border>
 
                                 <!-- Compaction separator -->

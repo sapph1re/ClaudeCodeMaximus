@@ -10,6 +10,7 @@ using Avalonia.VisualTree;
 using ClaudeMaximus.Services;
 using ClaudeMaximus.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
+using Serilog;
 
 namespace ClaudeMaximus.Views;
 
@@ -18,8 +19,12 @@ public partial class MainWindow : Window
 {
 	private bool _closeConfirmed;
 	private PixelPoint? _pendingPosition;
-
 	private bool _pendingMaximized;
+
+	// Track normal-state bounds because Avalonia reports Position=(0,0) when maximized
+	private PixelPoint _lastNormalPosition;
+	private double _lastNormalWidth;
+	private double _lastNormalHeight;
 
 	public MainWindow()
 	{
@@ -30,31 +35,59 @@ public partial class MainWindow : Window
 
 		Width  = ws.Width;
 		Height = ws.Height;
-		_pendingMaximized = ws.IsMaximized;
+		_pendingMaximized    = ws.IsMaximized;
+		_pendingPosition     = new PixelPoint((int)ws.Left, (int)ws.Top);
+		_lastNormalPosition  = _pendingPosition.Value;
+		_lastNormalWidth     = ws.Width;
+		_lastNormalHeight    = ws.Height;
 
 		MainContentGrid.ColumnDefinitions[0].Width = new GridLength(
 			Math.Clamp(ws.SplitterPosition, 180, 600));
 
-		// Validate saved position against current screens; defer actual positioning to Opened
-		_pendingPosition = ValidatePosition((int)ws.Left, (int)ws.Top, Width, Height);
-
+		PositionChanged += OnPositionChanged;
 		Opened += OnWindowOpened;
+	}
+
+	private void OnPositionChanged(object? sender, PixelPointEventArgs e)
+	{
+		if (WindowState == WindowState.Normal)
+		{
+			_lastNormalPosition = e.Point;
+			_lastNormalWidth    = Width;
+			_lastNormalHeight   = Height;
+		}
 	}
 
 	private void OnWindowOpened(object? sender, EventArgs e)
 	{
 		Opened -= OnWindowOpened;
 
-		// Apply validated position now that the window handle exists
+		Log.Information("WindowOpened: pending=({PosX},{PosY}), pendingMaximized={Max}, " +
+			"current Position=({CurX},{CurY}), WindowState={State}",
+			_pendingPosition?.X, _pendingPosition?.Y, _pendingMaximized,
+			Position.X, Position.Y, WindowState);
+
+		// Validate and apply position now that the window handle exists
+		// (Screens.All requires a handle, so this cannot be done in the constructor)
 		if (_pendingPosition.HasValue)
 		{
-			Position = _pendingPosition.Value;
+			var validated = ValidatePosition(
+				_pendingPosition.Value.X, _pendingPosition.Value.Y, Width, Height);
+			Log.Information("WindowOpened: validated=({VX},{VY}) from saved=({SX},{SY})",
+				validated.X, validated.Y, _pendingPosition.Value.X, _pendingPosition.Value.Y);
+			Position = validated;
+			_lastNormalPosition = validated;
 			_pendingPosition = null;
 		}
 
-		// Restore maximized state after position is set so RestoreBounds are correct
+		Log.Information("WindowOpened: Position after set = ({X},{Y})", Position.X, Position.Y);
+
+		// Restore maximized state after position is set so it maximizes on the correct screen
 		if (_pendingMaximized)
+		{
 			WindowState = WindowState.Maximized;
+			Log.Information("WindowOpened: maximized, Position now = ({X},{Y})", Position.X, Position.Y);
+		}
 
 		// Restore active session selection now that the tree UI is ready
 		if (DataContext is MainWindowViewModel vm)
@@ -70,16 +103,26 @@ public partial class MainWindow : Window
 		var centerX = left + (int)(width / 2);
 		var centerY = top + (int)(height / 2);
 
+		Log.Information("ValidatePosition: saved=({Left},{Top}), size=({W}x{H}), center=({CX},{CY}), screenCount={Count}",
+			left, top, width, height, centerX, centerY, Screens.All.Count);
+
 		foreach (var screen in Screens.All)
 		{
+			Log.Information("ValidatePosition: screen bounds={Bounds}, isPrimary={Primary}",
+				screen.Bounds, screen.IsPrimary);
+
 			if (screen.Bounds.Contains(new PixelPoint(centerX, centerY)))
+			{
+				Log.Information("ValidatePosition: center lands on this screen, returning ({Left},{Top})", left, top);
 				return new PixelPoint(left, top);
+			}
 		}
 
 		// Saved position is off-screen — center on primary
 		var primary = Screens.Primary?.Bounds ?? new PixelRect(0, 0, 1920, 1080);
 		var x = primary.X + (primary.Width - (int)width) / 2;
 		var y = primary.Y + (primary.Height - (int)height) / 2;
+		Log.Warning("ValidatePosition: center is off-screen, falling back to primary center ({X},{Y})", x, y);
 		return new PixelPoint(x, y);
 	}
 
@@ -117,16 +160,28 @@ public partial class MainWindow : Window
 		var isMaximized = WindowState == WindowState.Maximized;
 		ws.IsMaximized = isMaximized;
 
-		// Always save position (needed to know which screen the window is on).
-		// Only save size when not maximized, so the normal/restored bounds are preserved.
-		ws.Left = Position.X;
-		ws.Top  = Position.Y;
-
-		if (!isMaximized)
+		// When maximized, Avalonia reports Position=(0,0) regardless of screen,
+		// so use the last tracked normal-state position instead.
+		if (isMaximized)
 		{
+			ws.Left   = _lastNormalPosition.X;
+			ws.Top    = _lastNormalPosition.Y;
+			ws.Width  = _lastNormalWidth;
+			ws.Height = _lastNormalHeight;
+		}
+		else
+		{
+			ws.Left   = Position.X;
+			ws.Top    = Position.Y;
 			ws.Width  = Width;
 			ws.Height = Height;
 		}
+
+		Log.Information("OnClosed: WindowState={State}, Position=({PX},{PY}), " +
+			"lastNormal=({NX},{NY}), saving Left={Left}, Top={Top}, W={W}, H={H}, Max={Max}",
+			WindowState, Position.X, Position.Y,
+			_lastNormalPosition.X, _lastNormalPosition.Y,
+			ws.Left, ws.Top, ws.Width, ws.Height, ws.IsMaximized);
 
 		ws.SplitterPosition = MainContentGrid.ColumnDefinitions[0].Width.Value;
 
@@ -227,8 +282,18 @@ public partial class MainWindow : Window
 	private void OnMenuBarPointerPressed(object? sender, PointerPressedEventArgs e)
 	{
 		if (IsTitleBarControl(e.Source)) return;
-		if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-			BeginMoveDrag(e);
+		if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
+
+		if (e.ClickCount == 2)
+		{
+			WindowState = WindowState == WindowState.Maximized
+				? WindowState.Normal
+				: WindowState.Maximized;
+			e.Handled = true;
+			return;
+		}
+
+		BeginMoveDrag(e);
 	}
 
 	private static bool IsTitleBarControl(object? source)

@@ -22,9 +22,28 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	private readonly ISessionFileService _sessionFileService;
 	private readonly IClaudeSessionStatusService _claudeSessionStatus;
 	private readonly ISessionSearchService _searchService;
+	private readonly IGitOriginService _gitOriginService;
 	private string _searchText = string.Empty;
 	private SessionNodeViewModel? _selectedSession;
 	private CancellationTokenSource? _searchCts;
+
+	// ── Move mode state ──────────────────────────────────────────────────────
+	private bool _isMoveModeActive;
+	private SessionNodeViewModel? _movingSession;
+	private ViewModelBase? _moveOriginalParent;
+	private int _moveOriginalIndex;
+
+	public bool IsMoveModeActive
+	{
+		get => _isMoveModeActive;
+		private set => this.RaiseAndSetIfChanged(ref _isMoveModeActive, value);
+	}
+
+	public SessionNodeViewModel? MovingSession
+	{
+		get => _movingSession;
+		private set => this.RaiseAndSetIfChanged(ref _movingSession, value);
+	}
 
 	public ObservableCollection<DirectoryNodeViewModel> Directories { get; } = [];
 
@@ -47,17 +66,20 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		IDirectoryLabelService labelService,
 		ISessionFileService sessionFileService,
 		IClaudeSessionStatusService claudeSessionStatus,
-		ISessionSearchService searchService)
+		ISessionSearchService searchService,
+		IGitOriginService gitOriginService)
 	{
 		_appSettings = appSettings;
 		_labelService = labelService;
 		_sessionFileService = sessionFileService;
 		_claudeSessionStatus = claudeSessionStatus;
 		_searchService = searchService;
+		_gitOriginService = gitOriginService;
 
 		AddDirectoryCommand = ReactiveCommand.Create(PromptAddDirectory);
 
 		LoadFromSettings();
+		RefreshGitOrigins();
 		RefreshSessionResumability();
 		RefreshLastPromptTimes();
 
@@ -200,6 +222,322 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		parent.Model.Sessions.Remove(session.Model);
 		_appSettings.Save();
 		return true;
+	}
+
+	// --- Git origin ---
+
+	public void RefreshGitOrigins()
+	{
+		foreach (var dir in Directories)
+			dir.GitOrigin = _gitOriginService.GetOriginUrl(dir.Path);
+	}
+
+	/// <summary>
+	/// Returns the git origin for the directory that owns the given node.
+	/// Returns null if the session is not under a git-controlled directory.
+	/// </summary>
+	public string? GetGitOriginForNode(ViewModelBase node)
+	{
+		foreach (var dir in Directories)
+		{
+			if (dir == node || NodeExistsInChildren(dir.Children, node))
+				return dir.GitOrigin;
+		}
+		return null;
+	}
+
+	private static bool NodeExistsInChildren(ObservableCollection<ViewModelBase> children, ViewModelBase target)
+	{
+		foreach (var child in children)
+		{
+			if (child == target)
+				return true;
+			if (child is GroupNodeViewModel grp && NodeExistsInChildren(grp.Children, target))
+				return true;
+		}
+		return false;
+	}
+
+	/// <summary>
+	/// Checks whether a session with the given source git origin can be dropped/moved
+	/// onto the given target node.
+	/// </summary>
+	public bool CanMoveSessionTo(string? sourceGitOrigin, ViewModelBase target)
+	{
+		// No git origin on source → unrestricted
+		if (sourceGitOrigin is null)
+			return target is DirectoryNodeViewModel or GroupNodeViewModel;
+
+		if (target is not DirectoryNodeViewModel and not GroupNodeViewModel)
+			return false;
+
+		var targetOrigin = GetGitOriginForNode(target);
+		// Target has no git origin → cannot accept git-origined sessions
+		if (targetOrigin is null)
+			return false;
+
+		return string.Equals(sourceGitOrigin, targetOrigin, System.StringComparison.OrdinalIgnoreCase);
+	}
+
+	// --- Move operations ---
+
+	/// <summary>
+	/// Removes a session from its current parent (directory or group).
+	/// Returns the parent and index for undo capability.
+	/// </summary>
+	public (ViewModelBase? parent, int index) RemoveSessionFromTree(SessionNodeViewModel session)
+	{
+		foreach (var dir in Directories)
+		{
+			var idx = dir.Children.IndexOf(session);
+			if (idx >= 0)
+			{
+				dir.Children.RemoveAt(idx);
+				dir.Model.Sessions.Remove(session.Model);
+				return (dir, idx);
+			}
+
+			var result = RemoveSessionFromGroupChildren(dir.Children, session);
+			if (result.parent is not null)
+				return result;
+		}
+		return (null, -1);
+	}
+
+	private static (ViewModelBase? parent, int index) RemoveSessionFromGroupChildren(
+		ObservableCollection<ViewModelBase> children, SessionNodeViewModel session)
+	{
+		foreach (var child in children)
+		{
+			if (child is not GroupNodeViewModel grp)
+				continue;
+
+			var idx = grp.Children.IndexOf(session);
+			if (idx >= 0)
+			{
+				grp.Children.RemoveAt(idx);
+				grp.Model.Sessions.Remove(session.Model);
+				return (grp, idx);
+			}
+
+			var result = RemoveSessionFromGroupChildren(grp.Children, session);
+			if (result.parent is not null)
+				return result;
+		}
+		return (null, -1);
+	}
+
+	/// <summary>
+	/// Inserts a session into a target parent at the given index.
+	/// </summary>
+	public void InsertSessionAt(ViewModelBase parent, SessionNodeViewModel session, int index)
+	{
+		switch (parent)
+		{
+			case DirectoryNodeViewModel dir:
+				index = Math.Clamp(index, 0, dir.Children.Count);
+				dir.Children.Insert(index, session);
+				dir.Model.Sessions.Add(session.Model);
+				session.Model.WorkingDirectory = dir.Path;
+				break;
+			case GroupNodeViewModel grp:
+				index = Math.Clamp(index, 0, grp.Children.Count);
+				grp.Children.Insert(index, session);
+				grp.Model.Sessions.Add(session.Model);
+				session.Model.WorkingDirectory = grp.WorkingDirectory;
+				break;
+		}
+	}
+
+	/// <summary>
+	/// Moves a session to a target position. Target can be a Directory, Group, or another Session.
+	/// When target is a session, inserts below it. When target is a container, inserts at position 0.
+	/// </summary>
+	public bool MoveSessionTo(SessionNodeViewModel session, ViewModelBase target)
+	{
+		var sourceOrigin = GetGitOriginForNode(session);
+
+		ViewModelBase container;
+		int insertIndex;
+
+		if (target is SessionNodeViewModel targetSession)
+		{
+			// Find the parent of the target session and insert below it
+			var targetParentInfo = FindParentOf(targetSession);
+			if (targetParentInfo.parent is null)
+				return false;
+			container = targetParentInfo.parent;
+			insertIndex = targetParentInfo.index + 1;
+		}
+		else if (target is DirectoryNodeViewModel or GroupNodeViewModel)
+		{
+			container = target;
+			insertIndex = 0;
+		}
+		else
+			return false;
+
+		if (!CanMoveSessionTo(sourceOrigin, container))
+			return false;
+
+		RemoveSessionFromTree(session);
+
+		// Recalculate insert index after removal (might have shifted)
+		if (target is SessionNodeViewModel ts)
+		{
+			var newParent = FindParentOf(ts);
+			if (newParent.parent is null)
+				return false;
+			container = newParent.parent;
+			insertIndex = newParent.index + 1;
+		}
+
+		InsertSessionAt(container, session, insertIndex);
+		_appSettings.Save();
+		return true;
+	}
+
+	/// <summary>Finds the parent container and index of a given node.</summary>
+	public (ViewModelBase? parent, int index) FindParentOf(ViewModelBase node)
+	{
+		foreach (var dir in Directories)
+		{
+			var idx = dir.Children.IndexOf(node);
+			if (idx >= 0)
+				return (dir, idx);
+
+			var result = FindParentInGroupChildren(dir.Children, node);
+			if (result.parent is not null)
+				return result;
+		}
+		return (null, -1);
+	}
+
+	private static (ViewModelBase? parent, int index) FindParentInGroupChildren(
+		ObservableCollection<ViewModelBase> children, ViewModelBase node)
+	{
+		foreach (var child in children)
+		{
+			if (child is not GroupNodeViewModel grp)
+				continue;
+
+			var idx = grp.Children.IndexOf(node);
+			if (idx >= 0)
+				return (grp, idx);
+
+			var result = FindParentInGroupChildren(grp.Children, node);
+			if (result.parent is not null)
+				return result;
+		}
+		return (null, -1);
+	}
+
+	// --- Move mode ---
+
+	public void StartMoveMode(SessionNodeViewModel session)
+	{
+		if (IsMoveModeActive)
+			CancelMoveMode();
+
+		var (parent, index) = FindParentOf(session);
+		if (parent is null)
+			return;
+
+		MovingSession = session;
+		_moveOriginalParent = parent;
+		_moveOriginalIndex = index;
+		session.IsBeingMoved = true;
+		IsMoveModeActive = true;
+	}
+
+	public void CancelMoveMode()
+	{
+		if (!IsMoveModeActive || MovingSession is null)
+			return;
+
+		// Restore to original position
+		RemoveSessionFromTree(MovingSession);
+		InsertSessionAt(_moveOriginalParent!, MovingSession, _moveOriginalIndex);
+
+		MovingSession.IsBeingMoved = false;
+		MovingSession = null;
+		_moveOriginalParent = null;
+		IsMoveModeActive = false;
+		_appSettings.Save();
+	}
+
+	public bool ConfirmMoveMode()
+	{
+		if (!IsMoveModeActive || MovingSession is null)
+			return false;
+
+		MovingSession.IsBeingMoved = false;
+		MovingSession = null;
+		_moveOriginalParent = null;
+		IsMoveModeActive = false;
+		_appSettings.Save();
+		return true;
+	}
+
+	/// <summary>
+	/// During move mode, relocates the moving session to be adjacent to the
+	/// currently selected tree item. If the target is invalid, restores to original position.
+	/// </summary>
+	public void UpdateMovePosition(ViewModelBase? selectedItem)
+	{
+		if (!IsMoveModeActive || MovingSession is null || selectedItem is null)
+			return;
+
+		// Don't move relative to self
+		if (selectedItem == MovingSession)
+			return;
+
+		var sourceOrigin = GetGitOriginForNode(_moveOriginalParent!);
+
+		ViewModelBase targetContainer;
+		int targetIndex;
+
+		if (selectedItem is SessionNodeViewModel targetSession)
+		{
+			var parentInfo = FindParentOf(targetSession);
+			if (parentInfo.parent is null)
+				return;
+			targetContainer = parentInfo.parent;
+			targetIndex = parentInfo.index + 1;
+		}
+		else if (selectedItem is DirectoryNodeViewModel or GroupNodeViewModel)
+		{
+			targetContainer = selectedItem;
+			targetIndex = 0;
+		}
+		else
+			return;
+
+		if (!CanMoveSessionTo(sourceOrigin, targetContainer))
+		{
+			// Invalid target: ensure session is at original position
+			RemoveSessionFromTree(MovingSession);
+			InsertSessionAt(_moveOriginalParent!, MovingSession, _moveOriginalIndex);
+			return;
+		}
+
+		// Move to the new position
+		RemoveSessionFromTree(MovingSession);
+
+		// Recalculate index after removal
+		if (selectedItem is SessionNodeViewModel ts2)
+		{
+			var newParent = FindParentOf(ts2);
+			if (newParent.parent is null)
+			{
+				InsertSessionAt(_moveOriginalParent!, MovingSession, _moveOriginalIndex);
+				return;
+			}
+			targetContainer = newParent.parent;
+			targetIndex = newParent.index + 1;
+		}
+
+		InsertSessionAt(targetContainer, MovingSession, targetIndex);
 	}
 
 	// --- Private helpers ---

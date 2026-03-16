@@ -152,6 +152,10 @@
 - [DONE] Floating overlay in top-right of output area (yellow stroke/fill, match count, prev/next/close)
 - [DONE] Keyboard: Enter=search/next, Ctrl+Enter=prev, Escape=dismiss (preserves search text)
 - [DONE] Scroll-to-match via `BringIntoView` on matched message container
+- [DONE] Yellow text highlighting: `HighlightTextBlock` for plain text, `MarkdownView.HighlightTerm` for markdown (FR.10.4)
+- [DONE] Orange highlight for current match message to distinguish from other matches (FR.10.4)
+- [DONE] Precise scroll positioning: match text positioned at 25% from viewport top (FR.10.5)
+- [DONE] Re-search on text change: Enter with modified text performs new search (FR.10.6)
 
 ---
 
@@ -211,8 +215,45 @@
 
 ---
 
+## Bug Fixes
+
+### Self-Update on Exit (FR.8)
+- [DONE] Fix `FindBuildOutputDir` — was filtering for `bin\Debug` in path, missing builds in `Tempcmx-build/`
+- [DONE] Replace with `FindNewestBuildOutputDir` — finds newest DLL anywhere under solution root
+- [DONE] Fix PS script retry logic — use `$delays[$i]` directly, `exit 0` on success
+- [DONE] Update FR.8.1/FR.8.2 in requirements.md
+
+---
+
+## Phase 9 — Session Drag-and-Drop & Move
+
+### P9.1 Git Origin Detection
+- [DONE] `IGitOriginService` / `GitOriginService` — reads `.git/config` remote origin URL, handles worktrees
+- [DONE] `DirectoryNodeViewModel.GitOrigin` property resolved on startup
+- [DONE] Refresh button (↻) left of "Search sessions…" textbox to re-read git origins
+
+### P9.2 Drag-and-Drop Sessions
+- [DONE] Mouse drag initiation from session nodes
+- [DONE] Git origin restriction: sessions from git repos can only drop on same-origin directories/groups
+- [DONE] Non-git sessions can be dragged anywhere
+- [DONE] DragOver visual feedback (cursor changes)
+
+### P9.3 F2 Inline Rename
+- [DONE] F2 starts inline rename for sessions and groups (Enter = confirm, Esc = cancel)
+
+### P9.4 F6 / Right-Click Move Mode
+- [DONE] F6 or context menu "Move" starts move mode
+- [DONE] Session being moved: semi-transparent background, grey text
+- [DONE] Keyboard navigation: session follows selection (below sessions, first in folders)
+- [DONE] Git origin restrictions: invalid targets restore session to original position
+- [DONE] Enter confirms, Esc cancels
+- [DONE] "Move" added to session context menu
+
+---
+
 ## Backlog / Future
 
 - [ ] **P2.3 Search unit tests** — match / no-match / ancestor expansion
 - [ ] Session file watcher (detect disk deletion so tree delete button becomes available)
 - [ ] Integration tests for `ClaudeProcessManager` with a mock process
+- [ ] **Touchscreen UX review** — Review all UI interactions for touchscreen compatibility, plan touch-friendly gestures (long-press for context menu, swipe for move, tap-and-hold for drag), review hit target sizes, consider touch-specific affordances

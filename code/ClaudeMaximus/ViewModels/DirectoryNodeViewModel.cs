@@ -11,11 +11,22 @@ public sealed class DirectoryNodeViewModel : ViewModelBase
 	private readonly IDirectoryLabelService _labelService;
 	private bool _isVisible = true;
 	private bool _isExpanded;
+	private string? _gitOrigin;
 
 	public DirectoryNodeModel Model { get; }
 
 	public string Label => _labelService.GetLabel(Model.Path);
 	public string Path => Model.Path;
+
+	/// <summary>
+	/// The remote "origin" URL from .git/config, or null if not a git repo.
+	/// Used to restrict drag-and-drop / move operations between directories.
+	/// </summary>
+	public string? GitOrigin
+	{
+		get => _gitOrigin;
+		set => this.RaiseAndSetIfChanged(ref _gitOrigin, value);
+	}
 
 	/// <summary>
 	/// Combined children collection for TreeView binding.

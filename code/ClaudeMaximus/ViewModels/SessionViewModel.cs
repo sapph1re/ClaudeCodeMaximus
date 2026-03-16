@@ -49,6 +49,7 @@ public sealed class SessionViewModel : ViewModelBase
 		set
 		{
 			this.RaiseAndSetIfChanged(ref _inputText, value);
+			_node.HasDraftText = !string.IsNullOrWhiteSpace(value);
 			SaveDraft(value);
 		}
 	}
@@ -215,7 +216,10 @@ public sealed class SessionViewModel : ViewModelBase
 
 		var draft = _draftService.LoadDraft(_node.FileName);
 		if (draft is not null)
+		{
 			_inputText = draft;
+			_node.HasDraftText = !string.IsNullOrWhiteSpace(draft);
+		}
 	}
 
 	private async System.Threading.Tasks.Task SendAsync()

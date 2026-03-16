@@ -45,20 +45,34 @@ public static class Constants
 		public const string AutoDocument = "After completing the request, update any relevant requirements documents and/or architecture documents in the project's /docs directory to reflect the changes you made.";
 		public const string Clear = "After completing this request, please summarize the key outcomes and decisions from this session in a brief closing statement.";
 		public const string CompactionPrompt = """
-Please compact the conversation in this session. Preserve the user's prompts (you may rephrase them for brevity and clarity, but keep the attribution that specific instructions or knowledge came from the user). Focus on preserving: decisions made during development, the reasoning behind those decisions, architecture choices, and implementation details that matter. Remove transient information such as debugging steps, intermediate failed attempts, progress updates, and unnecessary verbosity.
+Please compact the conversation in this session.
+
+WHAT TO PRESERVE:
+- Decisions made during development and the reasoning behind them
+- Architecture choices and implementation details that matter
+- The attribution that specific instructions or knowledge came from the user
+
+WHAT TO REMOVE:
+- Transient information: debugging steps, intermediate failed attempts, progress updates, unnecessary verbosity
+- Meta-instructions from the user such as: commit/no-commit instructions, auto-document instructions, session compaction instructions, and any other process directives unrelated to the actual development work
+- Redundant back-and-forth about minor corrections or small fixes
+
+HOW TO RESTRUCTURE USER PROMPTS:
+- Group user inputs by semantic topic. Do NOT preserve every individual user message as a separate entry.
+- Use the timestamp of the FIRST user message in each semantic group as the entry timestamp.
+- Merge related follow-up messages (minor corrections, clarifications, small feature additions on the same topic) into the first message of that group.
+- Only start a new USER entry when the topic/intent meaningfully changes.
+- Rephrase for brevity and clarity while keeping the user's voice and intent clear.
 
 Output the compacted conversation in this EXACT format (no preamble, no wrapping text, start directly with the first entry):
 
 [2026-01-01T00:00:00Z] USER
-<compacted user prompt>
+<compacted user prompt — may merge multiple related user messages>
 
 [2026-01-01T00:00:00Z] ASSISTANT
-<compacted assistant response>
+<compacted assistant response — may merge multiple related responses>
 
-[2026-01-01T00:00:00Z] USER
-<next compacted user prompt>
-
-...and so on. Use the original timestamps from the conversation. Each entry starts with a [timestamp] ROLE header line, followed by the content, followed by a blank line. Do NOT include any text before the first [timestamp] header or after the last entry.
+Use the original timestamps from the conversation. Each entry starts with a [timestamp] ROLE header line, followed by the content, followed by a blank line. Do NOT include any text before the first [timestamp] header or after the last entry.
 """;
 	}
 

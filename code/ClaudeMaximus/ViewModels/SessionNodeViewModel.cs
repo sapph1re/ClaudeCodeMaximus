@@ -14,6 +14,8 @@ public sealed class SessionNodeViewModel : ViewModelBase
 	private bool _isRunning;
 	private bool _isResumable;
 	private bool _isVisible = true;
+	private bool _isBeingMoved;
+	private bool _hasDraftText;
 	private string? _lastPromptTime;
 	private DateTimeOffset? _lastPromptTimestamp;
 	private IBrush? _recencyBrush;
@@ -46,12 +48,40 @@ public sealed class SessionNodeViewModel : ViewModelBase
 		set => this.RaiseAndSetIfChanged(ref _isResumable, value);
 	}
 
+	/// <summary>True when the session's input text area contains text (a draft).</summary>
+	public bool HasDraftText
+	{
+		get => _hasDraftText;
+		set => this.RaiseAndSetIfChanged(ref _hasDraftText, value);
+	}
+
 	/// <summary>Controls visibility during search filtering.</summary>
 	public bool IsVisible
 	{
 		get => _isVisible;
 		set => this.RaiseAndSetIfChanged(ref _isVisible, value);
 	}
+
+	/// <summary>True while this session is being moved (F6 / drag). Drives semi-transparent visual.</summary>
+	public bool IsBeingMoved
+	{
+		get => _isBeingMoved;
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _isBeingMoved, value);
+			this.RaisePropertyChanged(nameof(MoveOpacity));
+			this.RaisePropertyChanged(nameof(MoveForeground));
+		}
+	}
+
+	/// <summary>Opacity when being moved (semi-transparent) vs normal.</summary>
+	public double MoveOpacity => _isBeingMoved ? 0.4 : 1.0;
+
+	/// <summary>Text brush when being moved (grey) vs default.</summary>
+	public IBrush MoveForeground => _isBeingMoved
+		? Brushes.Gray
+		: (Application.Current!.ActualThemeVariant == Avalonia.Styling.ThemeVariant.Dark
+			? Brushes.White : Brushes.Black);
 
 	/// <summary>Formatted date/time of the last user prompt in this session.</summary>
 	public string? LastPromptTime

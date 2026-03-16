@@ -8,6 +8,7 @@ namespace ClaudeMaximus.ViewModels;
 public sealed class MessageEntryViewModel : ViewModelBase
 {
 	private string _content = string.Empty;
+	private bool _isCurrentSearchMatch;
 
 	public required string Role { get; init; }
 
@@ -30,4 +31,11 @@ public sealed class MessageEntryViewModel : ViewModelBase
 	public bool IsAssistant  => Role == Constants.SessionFile.RoleAssistant;
 	public bool IsSystem     => Role == Constants.SessionFile.RoleSystem;
 	public bool IsCompaction => Role == Constants.SessionFile.RoleCompaction;
+
+	/// <summary>True when this message is the current search match target (gets orange highlight).</summary>
+	public bool IsCurrentSearchMatch
+	{
+		get => _isCurrentSearchMatch;
+		set => this.RaiseAndSetIfChanged(ref _isCurrentSearchMatch, value);
+	}
 }
