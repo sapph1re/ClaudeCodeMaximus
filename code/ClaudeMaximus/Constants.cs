@@ -44,6 +44,16 @@ public static class Constants
 		public const string NewBranch = "Create a new git branch before committing your changes.";
 		public const string AutoDocument = "After completing the request, update any relevant requirements documents and/or architecture documents in the project's /docs directory to reflect the changes you made.";
 		public const string Clear = "After completing this request, please summarize the key outcomes and decisions from this session in a brief closing statement.";
+
+		// Mid-run correction prompts (sent when user toggles flags while Claude is thinking)
+		public const string MidRunAutoCommitOn = "Additional instruction: Once you have completed the request, commit all your changes to git with a concise commit message.";
+		public const string MidRunAutoCommitOff = "Correction: Ignore previous instructions about committing to git. Do not commit any changes.";
+		public const string MidRunNewBranchOn = "Additional instruction: Create a new git branch before committing your changes.";
+		public const string MidRunNewBranchOff = "Correction: Ignore previous instructions about creating a new git branch. Do not create a new branch.";
+		public const string MidRunAutoDocumentOn = "Additional instruction: After completing the request, update any relevant requirements documents and/or architecture documents in the project's /docs directory to reflect the changes you made.";
+		public const string MidRunAutoDocumentOff = "Correction: Ignore previous instructions about updating documentation. Do not update any documentation files.";
+		public const string MidRunAutoCompactOn = "[Auto-compact has been enabled — the session will be compacted after this response completes.]";
+		public const string MidRunAutoCompactOff = "[Auto-compact has been disabled — the session will not be compacted after this response.]";
 		public const string CompactionPrompt = """
 Please compact the conversation in this session.
 

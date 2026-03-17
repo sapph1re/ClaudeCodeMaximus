@@ -364,6 +364,11 @@ The block is separated from the user's message by a blank line and a `---` delim
 
 **FR.11.10 — Proactive context reload:** When `SendAsync` detects that the session file contains history but `ClaudeSessionId` is null (e.g., after a Clear), the user's message is wrapped with `BuildContextPreamble` before being sent — without waiting for a "No conversation found" error. This ensures continuity after session clearing.
 
+**FR.11.11 — Mid-run toggle corrections:** When the user toggles Auto-Commit, New Branch, Auto-Document, or Auto-Compact while Claude is actively processing a prompt (`IsBusy` is true):
+- A system message is shown in the output panel: `[{ToggleName} was {enabled|disabled} for this run]`
+- For Auto-Commit, New Branch, and Auto-Document: a follow-up prompt is sent to the active Claude session with the new instruction (enable) or a correction telling Claude to ignore the previous instruction (disable). These correction prompts are fire-and-forget and do not appear in the session file or UI beyond the system status message.
+- For Auto-Compact: no prompt is sent (compaction happens post-response). The mid-run state is tracked and used when deciding whether to compact after the response completes. If the user enables then disables auto-compact during a single run, the final state at response completion determines behavior.
+
 ---
 
 ## Out of Scope (Initial Version)

@@ -35,6 +35,7 @@ public sealed class SessionViewModel : ViewModelBase
 	private bool _pendingClear;
 	private bool _isNewBranch;
 	private bool _isAutoCompact;
+	private bool _midRunAutoCompactState;
 	private DispatcherTimer? _draftDebounceTimer;
 
 	public string Name
@@ -78,9 +79,14 @@ public sealed class SessionViewModel : ViewModelBase
 		get => _node.Model.IsAutoCommit;
 		set
 		{
+			var oldValue = _node.Model.IsAutoCommit;
 			_node.Model.IsAutoCommit = value;
 			this.RaisePropertyChanged();
 			_appSettings.Save();
+			if (IsBusy && value != oldValue)
+				SendMidRunToggleCorrection("AutoCommit", value,
+					Constants.Instructions.MidRunAutoCommitOn,
+					Constants.Instructions.MidRunAutoCommitOff);
 		}
 	}
 
@@ -88,7 +94,15 @@ public sealed class SessionViewModel : ViewModelBase
 	public bool IsNewBranch
 	{
 		get => _isNewBranch;
-		set => this.RaiseAndSetIfChanged(ref _isNewBranch, value);
+		set
+		{
+			var oldValue = _isNewBranch;
+			this.RaiseAndSetIfChanged(ref _isNewBranch, value);
+			if (IsBusy && value != oldValue)
+				SendMidRunToggleCorrection("NewBranch", value,
+					Constants.Instructions.MidRunNewBranchOn,
+					Constants.Instructions.MidRunNewBranchOff);
+		}
 	}
 
 	/// <summary>Per-session sticky toggle (FR.11.5). Persisted in appsettings.json.</summary>
@@ -97,9 +111,14 @@ public sealed class SessionViewModel : ViewModelBase
 		get => _node.Model.IsAutoDocument;
 		set
 		{
+			var oldValue = _node.Model.IsAutoDocument;
 			_node.Model.IsAutoDocument = value;
 			this.RaisePropertyChanged();
 			_appSettings.Save();
+			if (IsBusy && value != oldValue)
+				SendMidRunToggleCorrection("AutoDocument", value,
+					Constants.Instructions.MidRunAutoDocumentOn,
+					Constants.Instructions.MidRunAutoDocumentOff);
 		}
 	}
 
@@ -107,7 +126,26 @@ public sealed class SessionViewModel : ViewModelBase
 	public bool IsAutoCompact
 	{
 		get => _isAutoCompact;
-		set => this.RaiseAndSetIfChanged(ref _isAutoCompact, value);
+		set
+		{
+			var oldValue = _isAutoCompact;
+			this.RaiseAndSetIfChanged(ref _isAutoCompact, value);
+			if (IsBusy && value != oldValue)
+			{
+				_midRunAutoCompactState = value;
+				var label = value ? "enabled" : "disabled";
+				var statusMsg = value
+					? Constants.Instructions.MidRunAutoCompactOn
+					: Constants.Instructions.MidRunAutoCompactOff;
+				Messages.Add(new MessageEntryViewModel
+				{
+					Role      = Constants.SessionFile.RoleSystem,
+					Content   = $"[AutoCompact was {label} for this run]",
+					Timestamp = DateTimeOffset.UtcNow,
+				});
+				_log.Information("Mid-run AutoCompact toggle: {State}", label);
+			}
+		}
 	}
 
 	/// <summary>True when the session has a live ClaudeSessionId that can be cleared.</summary>
@@ -235,6 +273,7 @@ public sealed class SessionViewModel : ViewModelBase
 		var wasNewBranch = _isNewBranch;
 		var wasAutoCompact = _isAutoCompact;
 		var wasPendingClear = _pendingClear;
+		_midRunAutoCompactState = _isAutoCompact;
 
 		// Build augmented message with hidden instructions (FR.11.2, FR.11.9)
 		var instructionBlock = BuildInstructionBlock();
@@ -343,7 +382,8 @@ public sealed class SessionViewModel : ViewModelBase
 			}
 
 			// Post-response: handle Auto-Compact (FR.11.6)
-			if (wasAutoCompact)
+			// Use _midRunAutoCompactState which reflects any mid-run toggle changes
+			if (_midRunAutoCompactState)
 			{
 				await SendCompactionPromptAsync();
 				IsAutoCompact = false;
@@ -607,6 +647,37 @@ public sealed class SessionViewModel : ViewModelBase
 				}
 			});
 		}
+	}
+
+	/// <summary>Sends a mid-run correction prompt when user toggles a flag while Claude is thinking.</summary>
+	private void SendMidRunToggleCorrection(string toggleName, bool newValue, string onPrompt, string offPrompt)
+	{
+		var label = newValue ? "enabled" : "disabled";
+		var prompt = newValue ? onPrompt : offPrompt;
+
+		Messages.Add(new MessageEntryViewModel
+		{
+			Role      = Constants.SessionFile.RoleSystem,
+			Content   = $"[{toggleName} was {label} for this run]",
+			Timestamp = DateTimeOffset.UtcNow,
+		});
+
+		_log.Information("Mid-run {Toggle} toggle: {State}, sending correction prompt", toggleName, label);
+
+		_ = _processManager.SendMessageAsync(
+			workingDirectory: _node.Model.WorkingDirectory,
+			claudePath:       _appSettings.Settings.ClaudePath,
+			sessionId:        _node.Model.ClaudeSessionId,
+			userMessage:      prompt,
+			onEvent:          evt =>
+			{
+				// Capture session ID updates but don't write to file or UI
+				if (evt.Type == "result" && !evt.IsError && evt.SessionId is not null)
+				{
+					_node.Model.ClaudeSessionId = evt.SessionId;
+					_appSettings.Save();
+				}
+			});
 	}
 
 	/// <summary>Builds the hidden instruction block appended to the user's message for claude stdin (FR.11.9).</summary>
