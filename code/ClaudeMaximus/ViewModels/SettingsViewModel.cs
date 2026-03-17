@@ -12,6 +12,7 @@ public sealed class SettingsViewModel : ViewModelBase
 	private readonly IAppSettingsService _appSettings;
 	private string _sessionFilesRoot;
 	private string _claudePath;
+	private string _sourceCodesLocation;
 	private bool _isDarkTheme;
 
 	// Color fields for the currently selected theme
@@ -38,6 +39,12 @@ public sealed class SettingsViewModel : ViewModelBase
 	{
 		get => _claudePath;
 		set => this.RaiseAndSetIfChanged(ref _claudePath, value);
+	}
+
+	public string SourceCodesLocation
+	{
+		get => _sourceCodesLocation;
+		set => this.RaiseAndSetIfChanged(ref _sourceCodesLocation, value);
 	}
 
 	public bool IsDarkTheme
@@ -129,6 +136,7 @@ public sealed class SettingsViewModel : ViewModelBase
 		_appSettings = appSettings;
 		_sessionFilesRoot = appSettings.Settings.SessionFilesRoot;
 		_claudePath = appSettings.Settings.ClaudePath;
+		_sourceCodesLocation = appSettings.Settings.SourceCodesLocation;
 		_isDarkTheme = appSettings.Settings.Theme == "Dark";
 
 		var colors = _isDarkTheme ? appSettings.Settings.DarkColors : appSettings.Settings.LightColors;
@@ -169,6 +177,7 @@ public sealed class SettingsViewModel : ViewModelBase
 	{
 		_appSettings.Settings.SessionFilesRoot = _sessionFilesRoot;
 		_appSettings.Settings.ClaudePath = _claudePath;
+		_appSettings.Settings.SourceCodesLocation = _sourceCodesLocation;
 		_appSettings.Settings.Theme = _isDarkTheme ? "Dark" : "Light";
 
 		// Save colors to the appropriate theme

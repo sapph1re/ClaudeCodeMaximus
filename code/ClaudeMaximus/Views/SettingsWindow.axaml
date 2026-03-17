@@ -35,6 +35,13 @@
                 <TextBox Text="{Binding ClaudePath}" Watermark="claude (resolved from PATH)"/>
             </StackPanel>
 
+            <!-- Source codes location -->
+            <StackPanel Spacing="4">
+                <TextBlock Text="Source Codes Location" FontWeight="SemiBold"/>
+                <TextBox Text="{Binding SourceCodesLocation}"
+                         Watermark="Auto-detected from running directory"/>
+            </StackPanel>
+
             <Separator Margin="0,4"/>
 
             <!-- Theme selection -->

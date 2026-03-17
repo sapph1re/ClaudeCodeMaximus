@@ -3,15 +3,18 @@
 ## dotnet — chain commands
 `&&` does NOT work in Windows cmd, but works fine in bash (which Claude Code uses here). Use `&&` normally.
 
-## dotnet build — app is always running (exe and dll locked)
+## dotnet build — standard build
 
-ClaudeMaximus is always running when Claude Code is active (the session IS the app). The app does **not** run from `bin\Debug\net9.0\` — it runs from an arbitrary directory (typically `/publish`) where updated binaries are copied by the self-update mechanism on exit (see FR.8 in `requirements.md`). The standard build output is `code/ClaudeMaximus/bin/Debug/net9.0/`. Both the running directory and `bin\Debug\net9.0\` have locked DLLs during development, so a normal build always fails. Do NOT use the `Tempcmx-build` folder — it is deprecated and non-functional.
+Build normally without the `-o` flag:
+```
+dotnet build code/ClaudeMaximus.sln
+```
 
-**Fix:** always redirect output to a temp directory:
-```
-dotnet build code/ClaudeMaximus.sln -o "C:\Temp\ClaudeMaximus-build-check"
-```
-This writes compiled output to a fresh directory that is never locked. Do NOT use `dotnet build` without `-o` on this project.
+The app runs from a separate directory (typically `code/ClaudeMaximus/publish/`), not from `bin\Debug\net9.0\`. Therefore `bin\Debug\net9.0\` should not be locked during builds.
+
+If the app is accidentally launched directly from `bin\Debug\net9.0\`, a warning icon (⚠) appears in the title bar and self-update is disabled for that session.
+
+Do NOT use the `Tempcmx-build` folder — it is deprecated. Do NOT use `-o` to redirect build output — the self-update mechanism looks for builds in `bin/Debug/net9.0/`.
 
 ## Avalonia — compiled bindings in DataTemplates
 `x:DataType` on a `DataTemplate` or `TreeDataTemplate` inside a control's `DataTemplates` collection does NOT correctly scope compiled bindings — Avalonia resolves `{Binding X}` against the outer control's `x:DataType` instead of the template's type, returning null silently.

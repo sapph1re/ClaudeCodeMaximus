@@ -28,4 +28,10 @@ public sealed class AppSettingsModel
 
 	/// <summary>Whether the tree panel is collapsed (auto-hidden).</summary>
 	public bool IsTreePanelCollapsed { get; set; }
+
+	/// <summary>
+	/// Path to the ClaudeMaximus source codes root (solution directory).
+	/// Used by self-update to find build output. Empty = auto-detect or skip.
+	/// </summary>
+	public string SourceCodesLocation { get; set; } = string.Empty;
 }

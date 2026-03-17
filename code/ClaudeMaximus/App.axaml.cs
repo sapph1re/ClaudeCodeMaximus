@@ -33,6 +33,9 @@ public partial class App : Application
 
 		ThemeApplicator.Apply(appSettings.Settings);
 
+		var selfUpdate = Services.GetRequiredService<ISelfUpdateService>();
+		selfUpdate.Initialize();
+
 		if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
 		{
 			desktop.MainWindow = new MainWindow
@@ -40,7 +43,7 @@ public partial class App : Application
 				DataContext = Services.GetRequiredService<MainWindowViewModel>(),
 			};
 
-			desktop.Exit += (_, _) => Services.GetRequiredService<ISelfUpdateService>().CheckAndTriggerUpdate();
+			desktop.Exit += (_, _) => selfUpdate.CheckAndTriggerUpdate();
 		}
 
 		base.OnFrameworkInitializationCompleted();

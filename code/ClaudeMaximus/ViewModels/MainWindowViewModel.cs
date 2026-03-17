@@ -16,6 +16,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private readonly IClaudeProcessManager _processManager;
 	private readonly IDraftService _draftService;
 	private readonly ICodeIndexService _codeIndexService;
+	private readonly ISelfUpdateService _selfUpdate;
 	private readonly Dictionary<string, SessionViewModel> _sessionCache = new();
 	private double _splitterPosition;
 	private SessionViewModel? _activeSession;
@@ -101,12 +102,16 @@ public sealed class MainWindowViewModel : ViewModelBase
 	public ReactiveCommand<Unit, Unit> ToggleThemeCommand { get; }
 	public ReactiveCommand<Unit, Unit> ClearSessionCommand { get; }
 
+	/// <summary>True when the app is running from build output — shows warning icon in title bar.</summary>
+	public bool IsRunningFromBuildOutput => _selfUpdate.IsRunningFromBuildOutput;
+
 	public MainWindowViewModel(
 		IAppSettingsService appSettings,
 		ISessionFileService fileService,
 		IClaudeProcessManager processManager,
 		IDraftService draftService,
 		ICodeIndexService codeIndexService,
+		ISelfUpdateService selfUpdate,
 		SessionTreeViewModel sessionTree)
 	{
 		_appSettings      = appSettings;
@@ -114,6 +119,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		_processManager   = processManager;
 		_draftService     = draftService;
 		_codeIndexService = codeIndexService;
+		_selfUpdate       = selfUpdate;
 		SessionTree       = sessionTree;
 		_splitterPosition = appSettings.Settings.Window.SplitterPosition;
 		_isTreePanelVisible = !appSettings.Settings.IsTreePanelCollapsed;

@@ -8,45 +8,98 @@ namespace ClaudeMaximus.Services;
 
 /// <summary>
 /// Detects whether a fresh build is available and spawns an out-of-process
-/// copy script so the publish directory is updated after the app exits.
+/// copy script so the running directory is updated after the app exits.
 /// </summary>
 public class SelfUpdateService : ISelfUpdateService
 {
 	private const string AssemblyFileName = "ClaudeMaximus.dll";
+	private const string SolutionFileName = "*.sln";
 
 	private static readonly int[] RetryDelays = { 1, 2, 4, 8, 16, 32, 64 };
 
+	private readonly IAppSettingsService _appSettings;
+
+	public bool IsRunningFromBuildOutput { get; private set; }
+
+	public SelfUpdateService(IAppSettingsService appSettings)
+	{
+		_appSettings = appSettings;
+	}
+
+	public void Initialize()
+	{
+		var runningDir = AppContext.BaseDirectory.TrimEnd('\\', '/');
+
+		// Auto-detect source location if not configured
+		var sourceLocation = _appSettings.Settings.SourceCodesLocation;
+		if (string.IsNullOrEmpty(sourceLocation))
+		{
+			sourceLocation = FindSolutionRoot(runningDir);
+			if (sourceLocation != null)
+			{
+				Log.Information("SelfUpdate: auto-detected source location = {SourceLocation}", sourceLocation);
+				_appSettings.Settings.SourceCodesLocation = sourceLocation;
+				_appSettings.Save();
+			}
+		}
+
+		// Check if running from project build output
+		if (!string.IsNullOrEmpty(sourceLocation))
+		{
+			var buildOutputDir = FindBuildOutputDir(sourceLocation);
+			if (buildOutputDir != null &&
+				runningDir.Equals(buildOutputDir, StringComparison.OrdinalIgnoreCase))
+			{
+				IsRunningFromBuildOutput = true;
+				Log.Warning("SelfUpdate: running from build output ({Dir}), self-update disabled", runningDir);
+			}
+		}
+
+		Log.Information("SelfUpdate: initialized. RunningDir={RunningDir}, SourceLocation={Source}, RunningFromBuild={Flag}",
+			runningDir, sourceLocation ?? "(none)", IsRunningFromBuildOutput);
+	}
+
 	public void CheckAndTriggerUpdate()
 	{
+		if (IsRunningFromBuildOutput)
+		{
+			Log.Information("SelfUpdate: skipping — running from build output.");
+			return;
+		}
+
 		try
 		{
-			var runningDir   = AppContext.BaseDirectory.TrimEnd('\\', '/');
-			var solutionRoot = FindSolutionRoot(runningDir);
+			var runningDir = AppContext.BaseDirectory.TrimEnd('\\', '/');
+			var sourceLocation = _appSettings.Settings.SourceCodesLocation;
 
-			if (solutionRoot == null)
+			if (string.IsNullOrEmpty(sourceLocation))
 			{
-				Log.Information("SelfUpdate: solution root not found from {RunningDir}, skipping.", runningDir);
+				Log.Information("SelfUpdate: no source location configured, skipping.");
 				return;
 			}
 
-			Log.Information("SelfUpdate: solution root = {SolutionRoot}, running from = {RunningDir}", solutionRoot, runningDir);
-
-			var sourceDir = FindNewestBuildOutputDir(solutionRoot, runningDir);
-			if (sourceDir == null)
+			var buildOutputDir = FindBuildOutputDir(sourceLocation);
+			if (buildOutputDir == null)
 			{
-				Log.Information("SelfUpdate: no build output directory found under {SolutionRoot}", solutionRoot);
+				Log.Information("SelfUpdate: build output directory not found under {Source}", sourceLocation);
 				return;
 			}
 
-			var sourceDll  = Path.Combine(sourceDir,  AssemblyFileName);
+			var sourceDll  = Path.Combine(buildOutputDir, AssemblyFileName);
 			var runningDll = Path.Combine(runningDir, AssemblyFileName);
 
-			Log.Information("SelfUpdate: candidate sourceDir = {SourceDir}", sourceDir);
+			Log.Information("SelfUpdate: source = {SourceDir}", buildOutputDir);
+
+			if (!File.Exists(sourceDll))
+			{
+				Log.Information("SelfUpdate: source dll not found: {SourceDll}", sourceDll);
+				return;
+			}
 
 			if (!File.Exists(runningDll))
 			{
 				Log.Information("SelfUpdate: running dll not found: {RunningDll}, spawning copy anyway.", runningDll);
-				SpawnCopyProcess(sourceDir, runningDir);
+				SpawnCopyProcess(buildOutputDir, runningDir);
 				return;
 			}
 
@@ -60,7 +113,7 @@ public class SelfUpdateService : ISelfUpdateService
 			}
 
 			Log.Information("SelfUpdate: newer build detected, spawning copy. Source={SrcTime}, Running={RunTime}", srcTime, runTime);
-			SpawnCopyProcess(sourceDir, runningDir);
+			SpawnCopyProcess(buildOutputDir, runningDir);
 		}
 		catch (Exception ex)
 		{
@@ -68,34 +121,15 @@ public class SelfUpdateService : ISelfUpdateService
 		}
 	}
 
-	// Walk up the directory tree from startDir until a *.sln file is found.
-	private static string? FindSolutionRoot(string startDir)
-	{
-		var current = startDir;
-		while (current != null)
-		{
-			if (Directory.GetFiles(current, "*.sln", SearchOption.TopDirectoryOnly).Any())
-				return current;
-
-			current = Directory.GetParent(current)?.FullName;
-		}
-
-		return null;
-	}
-
 	/// <summary>
-	/// Finds the standard build output directory (bin/Debug/net9.0) under the solution root
-	/// that contains ClaudeMaximus.dll, excluding the running directory itself.
+	/// Finds the bin/Debug/net9.0 directory for the main ClaudeMaximus project
+	/// under the given solution root.
 	/// </summary>
-	private static string? FindNewestBuildOutputDir(string solutionRoot, string runningDir)
+	private static string? FindBuildOutputDir(string solutionRoot)
 	{
 		try
 		{
-			// Look for .csproj files to find project directories, then check their bin/Debug/net9.0
 			var csprojFiles = Directory.GetFiles(solutionRoot, "ClaudeMaximus.csproj", SearchOption.AllDirectories);
-
-			string? bestDir = null;
-			DateTime bestTime = DateTime.MinValue;
 
 			foreach (var csproj in csprojFiles)
 			{
@@ -106,32 +140,33 @@ public class SelfUpdateService : ISelfUpdateService
 					continue;
 
 				var binDebugDir = Path.Combine(projectDir, "bin", "Debug", "net9.0");
-				var candidate = Path.Combine(binDebugDir, AssemblyFileName);
+				if (Directory.Exists(binDebugDir))
+					return binDebugDir;
 
-				if (!File.Exists(candidate))
-					continue;
-
-				var dir = binDebugDir;
-
-				// Skip the directory we're running from
-				if (dir.Equals(runningDir, StringComparison.OrdinalIgnoreCase))
-					continue;
-
-				var writeTime = File.GetLastWriteTimeUtc(candidate);
-				Log.Debug("SelfUpdate: found candidate {Dir}, modified {Time}", dir, writeTime);
-
-				if (writeTime > bestTime)
-				{
-					bestTime = writeTime;
-					bestDir = dir;
-				}
+				// If the directory doesn't exist yet, still return the expected path
+				return binDebugDir;
 			}
-
-			return bestDir;
 		}
 		catch (Exception ex)
 		{
-			Log.Warning(ex, "SelfUpdate: error searching for build output under {Root}", solutionRoot);
+			Log.Warning(ex, "SelfUpdate: error finding build output under {Root}", solutionRoot);
+		}
+
+		return null;
+	}
+
+	/// <summary>
+	/// Walk up the directory tree from startDir until a *.sln file is found.
+	/// </summary>
+	private static string? FindSolutionRoot(string startDir)
+	{
+		var current = startDir;
+		while (current != null)
+		{
+			if (Directory.GetFiles(current, SolutionFileName, SearchOption.TopDirectoryOnly).Any())
+				return current;
+
+			current = Directory.GetParent(current)?.FullName;
 		}
 
 		return null;
@@ -144,10 +179,10 @@ public class SelfUpdateService : ISelfUpdateService
 
 		var psi = new ProcessStartInfo
 		{
-			FileName         = "powershell.exe",
-			Arguments        = $"-WindowStyle Hidden -ExecutionPolicy Bypass -File \"{scriptPath}\"",
-			UseShellExecute  = true,
-			CreateNoWindow   = true,
+			FileName        = "powershell.exe",
+			Arguments       = $"-ExecutionPolicy Bypass -File \"{scriptPath}\"",
+			UseShellExecute = true,
+			CreateNoWindow  = false,
 		};
 
 		Process.Start(psi);
