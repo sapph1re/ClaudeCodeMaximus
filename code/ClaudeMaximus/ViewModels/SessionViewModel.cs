@@ -207,8 +207,8 @@ public sealed class SessionViewModel : ViewModelBase
 	/// <summary>Display names for the model selector.</summary>
 	public static string[] AvailableModels { get; } = ["Default", "Opus", "Sonnet", "Haiku"];
 
-	/// <summary>Model IDs passed to --model flag. Empty string means no flag.</summary>
-	private static readonly string[] ModelIds = ["", "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"];
+	/// <summary>Model aliases passed to --model flag. Empty string means no flag. CLI resolves aliases to latest version.</summary>
+	private static readonly string[] ModelIds = ["", "opus", "sonnet", "haiku"];
 
 	/// <summary>Selected model index (0=Default, 1=Opus, 2=Sonnet, 3=Haiku). Persisted in appsettings.</summary>
 	public int SelectedModelIndex

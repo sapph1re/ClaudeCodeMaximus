@@ -381,9 +381,11 @@ The input area includes a collapsible command bar for runtime configuration of t
 | Index | Label | CLI Flag |
 |---|---|---|
 | 0 | Default | (no `--model` flag — uses Claude Code's own default) |
-| 1 | Opus | `--model claude-opus-4-6` |
-| 2 | Sonnet | `--model claude-sonnet-4-6` |
-| 3 | Haiku | `--model claude-haiku-4-5-20251001` |
+| 1 | Opus | `--model opus` |
+| 2 | Sonnet | `--model sonnet` |
+| 3 | Haiku | `--model haiku` |
+
+The CLI accepts short aliases (`opus`, `sonnet`, `haiku`) which automatically resolve to the latest model version in each family.
 
 **FR.12.4 — Model persistence:** The selected model index is persisted in `appsettings.json` (`SelectedModelIndex`). It is a global setting (not per-session).
 
