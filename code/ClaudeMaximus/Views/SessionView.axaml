@@ -182,32 +182,66 @@
         <Border Grid.Row="4" Padding="8"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
                 BorderThickness="0,1,0,0">
-            <Grid ColumnDefinitions="*,Auto">
-                <Panel Grid.Column="0">
-                    <TextBox x:Name="InputBox"
-                             Text="{Binding InputText}"
-                             AcceptsReturn="True"
-                             Watermark="Type a message... (Ctrl+Enter to send)  |  # symbol  ## file"
-                             TextWrapping="Wrap"
-                             FontFamily="Cascadia Code,Consolas,monospace"
-                             FontSize="{Binding InputFontSize}"
-                             Background="{DynamicResource CmxInputBg}"
-                             Foreground="{DynamicResource CmxInputFg}"/>
-                    <Popup x:Name="AutocompletePopup"
-                           PlacementTarget="{Binding ElementName=InputBox}"
-                           Placement="Top"
-                           IsOpen="{Binding AutocompleteVm.IsOpen, Mode=OneWay}"
-                           IsLightDismissEnabled="False"
-                           x:CompileBindings="False">
-                        <views:AutocompletePopup DataContext="{Binding AutocompleteVm}"/>
-                    </Popup>
-                </Panel>
-                <Button Grid.Column="1"
-                        Content="Send"
-                        VerticalAlignment="Stretch"
-                        VerticalContentAlignment="Center"
-                        Margin="8,0,0,0"
-                        Command="{Binding SendCommand}"/>
+            <Grid RowDefinitions="*,Auto">
+                <!-- Row 0: Input area + Send/Settings buttons -->
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                    <Panel Grid.Column="0">
+                        <TextBox x:Name="InputBox"
+                                 Text="{Binding InputText}"
+                                 AcceptsReturn="True"
+                                 Watermark="Type a message... (Ctrl+Enter to send)  |  # symbol  ## file"
+                                 TextWrapping="Wrap"
+                                 FontFamily="Cascadia Code,Consolas,monospace"
+                                 FontSize="{Binding InputFontSize}"
+                                 Background="{DynamicResource CmxInputBg}"
+                                 Foreground="{DynamicResource CmxInputFg}"/>
+                        <Popup x:Name="AutocompletePopup"
+                               PlacementTarget="{Binding ElementName=InputBox}"
+                               Placement="Top"
+                               IsOpen="{Binding AutocompleteVm.IsOpen, Mode=OneWay}"
+                               IsLightDismissEnabled="False"
+                               x:CompileBindings="False">
+                            <views:AutocompletePopup DataContext="{Binding AutocompleteVm}"/>
+                        </Popup>
+                    </Panel>
+                    <Grid Grid.Column="1" RowDefinitions="*,*" Margin="8,0,0,0">
+                        <Button Grid.Row="0"
+                                Content="Send"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                VerticalAlignment="Stretch"
+                                VerticalContentAlignment="Center"
+                                Command="{Binding SendCommand}"/>
+                        <ToggleButton Grid.Row="1"
+                                      Content="&#x2699;"
+                                      FontSize="16"
+                                      HorizontalAlignment="Stretch"
+                                      HorizontalContentAlignment="Center"
+                                      VerticalAlignment="Stretch"
+                                      VerticalContentAlignment="Center"
+                                      IsChecked="{Binding IsCommandBarVisible}"
+                                      ToolTip.Tip="Toggle command bar"/>
+                    </Grid>
+                </Grid>
+                <!-- Row 1: Command bar (model selection) -->
+                <Border Grid.Row="1"
+                        IsVisible="{Binding IsCommandBarVisible}"
+                        Padding="6,4"
+                        Margin="0,4,0,0"
+                        CornerRadius="4"
+                        Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="Model:"
+                                   VerticalAlignment="Center"
+                                   FontSize="12" Opacity="0.7"/>
+                        <ComboBox ItemsSource="{Binding AvailableModels}"
+                                  SelectedIndex="{Binding SelectedModelIndex}"
+                                  VerticalAlignment="Center"
+                                  FontSize="12"
+                                  MinWidth="100"
+                                  Padding="6,3"/>
+                    </StackPanel>
+                </Border>
             </Grid>
         </Border>
 

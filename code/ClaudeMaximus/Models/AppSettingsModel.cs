@@ -34,4 +34,10 @@ public sealed class AppSettingsModel
 	/// Used by self-update to find build output. Empty = auto-detect or skip.
 	/// </summary>
 	public string SourceCodesLocation { get; set; } = string.Empty;
+
+	/// <summary>
+	/// Selected Claude model index (0=Default, 1=Opus, 2=Sonnet, 3=Haiku).
+	/// When 0 (Default), no --model flag is passed to the CLI.
+	/// </summary>
+	public int SelectedModelIndex { get; set; }
 }

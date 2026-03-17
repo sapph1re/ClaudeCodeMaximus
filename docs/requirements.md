@@ -369,6 +369,26 @@ The block is separated from the user's message by a blank line and a `---` delim
 - For Auto-Commit, New Branch, and Auto-Document: a follow-up prompt is sent to the active Claude session with the new instruction (enable) or a correction telling Claude to ignore the previous instruction (disable). These correction prompts are fire-and-forget and do not appear in the session file or UI beyond the system status message.
 - For Auto-Compact: no prompt is sent (compaction happens post-response). The mid-run state is tracked and used when deciding whether to compact after the response completes. If the user enables then disables auto-compact during a single run, the final state at response completion determines behavior.
 
+### FR.12 — Input Command Bar & Model Selection
+
+The input area includes a collapsible command bar for runtime configuration of the Claude process parameters.
+
+**FR.12.1 — Settings toggle button:** The right side of the input area is split vertically into two equal-height buttons: the existing **Send** button on top and a **Settings toggle** (gear icon ⚙) on the bottom. The settings toggle controls visibility of the command bar.
+
+**FR.12.2 — Command bar layout:** The command bar appears directly beneath the text input area (within the same input border). When visible, it reduces the available height for the text input. The command bar has a subtle background matching the chrome medium brush for visual separation.
+
+**FR.12.3 — Model selection:** The command bar contains a model selector (ComboBox) with the following options:
+| Index | Label | CLI Flag |
+|---|---|---|
+| 0 | Default | (no `--model` flag — uses Claude Code's own default) |
+| 1 | Opus | `--model claude-opus-4-6` |
+| 2 | Sonnet | `--model claude-sonnet-4-6` |
+| 3 | Haiku | `--model claude-haiku-4-5-20251001` |
+
+**FR.12.4 — Model persistence:** The selected model index is persisted in `appsettings.json` (`SelectedModelIndex`). It is a global setting (not per-session).
+
+**FR.12.5 — Model flag injection:** When a non-default model is selected, the `--model <id>` flag is appended to the `claude` CLI arguments for all process spawns (user messages, context retries, compaction, and mid-run corrections).
+
 ---
 
 ## Out of Scope (Initial Version)

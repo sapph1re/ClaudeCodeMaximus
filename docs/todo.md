@@ -251,6 +251,18 @@
 
 ---
 
+## Phase 10 — Input Command Bar & Model Selection (FR.12) ✓ DONE
+
+### P10.1 Model Selection & Command Bar ✓
+- [DONE] Settings toggle button (gear icon) below Send button in input area (FR.12.1)
+- [DONE] Collapsible command bar beneath text input with model ComboBox (FR.12.2, FR.12.3)
+- [DONE] `SelectedModelIndex` persisted in `AppSettingsModel` (FR.12.4)
+- [DONE] `--model` flag passed to all `SendMessageAsync` calls when non-default model selected (FR.12.5)
+- [DONE] `IClaudeProcessManager.SendMessageAsync` accepts optional `model` parameter
+- [DONE] `ClaudeProcessManager.BuildArguments` appends `--model` when provided
+
+---
+
 ## Backlog / Future
 
 - [ ] **P2.3 Search unit tests** — match / no-match / ancestor expansion

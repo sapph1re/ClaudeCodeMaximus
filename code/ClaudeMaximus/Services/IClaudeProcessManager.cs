@@ -25,6 +25,7 @@ public interface IClaudeProcessManager
 		string? sessionId,
 		string userMessage,
 		Action<ClaudeStreamEvent> onEvent,
+		string? model = null,
 		CancellationToken cancellationToken = default);
 
 	/// <summary>Kills all active claude processes immediately.</summary>

@@ -37,6 +37,8 @@ public sealed class SessionViewModel : ViewModelBase
 	private bool _isAutoCompact;
 	private bool _midRunAutoCompactState;
 	private DispatcherTimer? _draftDebounceTimer;
+	private bool _isCommandBarVisible;
+	private int _selectedModelIndex;
 
 	public string Name
 	{
@@ -195,6 +197,37 @@ public sealed class SessionViewModel : ViewModelBase
 		}
 	}
 
+	/// <summary>Whether the command bar beneath the input area is visible.</summary>
+	public bool IsCommandBarVisible
+	{
+		get => _isCommandBarVisible;
+		set => this.RaiseAndSetIfChanged(ref _isCommandBarVisible, value);
+	}
+
+	/// <summary>Display names for the model selector.</summary>
+	public static string[] AvailableModels { get; } = ["Default", "Opus", "Sonnet", "Haiku"];
+
+	/// <summary>Model IDs passed to --model flag. Empty string means no flag.</summary>
+	private static readonly string[] ModelIds = ["", "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"];
+
+	/// <summary>Selected model index (0=Default, 1=Opus, 2=Sonnet, 3=Haiku). Persisted in appsettings.</summary>
+	public int SelectedModelIndex
+	{
+		get => _selectedModelIndex;
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _selectedModelIndex, value);
+			_appSettings.Settings.SelectedModelIndex = value;
+			_appSettings.Save();
+		}
+	}
+
+	/// <summary>Returns the model ID for --model flag, or null if Default is selected.</summary>
+	public string? SelectedModelId =>
+		_selectedModelIndex > 0 && _selectedModelIndex < ModelIds.Length
+			? ModelIds[_selectedModelIndex]
+			: null;
+
 	/// <summary>Persisted vertical scroll offset for the message area.</summary>
 	public double ScrollOffset
 	{
@@ -226,6 +259,7 @@ public sealed class SessionViewModel : ViewModelBase
 		_draftService     = draftService;
 		_codeIndexService = codeIndexService;
 		_name             = node.Name;
+		_selectedModelIndex = Math.Clamp(appSettings.Settings.SelectedModelIndex, 0, ModelIds.Length - 1);
 		AutocompleteVm    = new AutocompleteViewModel(codeIndexService);
 		OutputSearchVm    = new OutputSearchViewModel(Messages);
 
@@ -342,7 +376,8 @@ public sealed class SessionViewModel : ViewModelBase
 				claudePath:       _appSettings.Settings.ClaudePath,
 				sessionId:        sessionId,
 				userMessage:      messageToSend,
-				onEvent:          HandleStreamEvent);
+				onEvent:          HandleStreamEvent,
+				model:            SelectedModelId);
 
 			if (_needsContextRetry)
 			{
@@ -369,7 +404,8 @@ public sealed class SessionViewModel : ViewModelBase
 					claudePath:       _appSettings.Settings.ClaudePath,
 					sessionId:        null,
 					userMessage:      enrichedMessage,
-					onEvent:          HandleStreamEvent);
+					onEvent:          HandleStreamEvent,
+					model:            SelectedModelId);
 			}
 
 			// Post-response: handle Clear (FR.11.7)
@@ -595,6 +631,7 @@ public sealed class SessionViewModel : ViewModelBase
 			claudePath:       _appSettings.Settings.ClaudePath,
 			sessionId:        _node.Model.ClaudeSessionId,
 			userMessage:      Constants.Instructions.CompactionPrompt,
+			model:            SelectedModelId,
 			onEvent:          evt =>
 			{
 				if (evt.Type == "assistant" && !string.IsNullOrWhiteSpace(evt.Content))
@@ -669,6 +706,7 @@ public sealed class SessionViewModel : ViewModelBase
 			claudePath:       _appSettings.Settings.ClaudePath,
 			sessionId:        _node.Model.ClaudeSessionId,
 			userMessage:      prompt,
+			model:            SelectedModelId,
 			onEvent:          evt =>
 			{
 				// Capture session ID updates but don't write to file or UI
