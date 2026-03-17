@@ -39,15 +39,19 @@ public sealed class ClaudeSessionStatusService : IClaudeSessionStatusService
 
 	/// <summary>
 	/// Derives the project slug that Claude Code uses for its session storage path.
-	/// Replaces ':', '\', '/' with '-'. Trailing separators are trimmed first.
-	/// Example: C:\Projects\Foo → C--Projects-Foo
+	/// Claude CLI replaces all non-alphanumeric characters (except '-') with '-'.
+	/// Trailing path separators are trimmed first.
+	/// Example: C:\Projects\my_app → C--Projects-my-app
 	/// </summary>
 	private static string BuildProjectSlug(string workingDirectory)
 	{
-		return workingDirectory
-			.TrimEnd('\\', '/')
-			.Replace(':', '-')
-			.Replace('\\', '-')
-			.Replace('/', '-');
+		var trimmed = workingDirectory.TrimEnd('\\', '/');
+		var chars = new char[trimmed.Length];
+		for (var i = 0; i < trimmed.Length; i++)
+		{
+			var c = trimmed[i];
+			chars[i] = char.IsLetterOrDigit(c) || c == '-' ? c : '-';
+		}
+		return new string(chars);
 	}
 }
