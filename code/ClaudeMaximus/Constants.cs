@@ -92,5 +92,23 @@ Use the original timestamps from the conversation. Each entry starts with a [tim
 		public const string ProjectsFolderName = "projects";
 		public const string SessionFileExtension = ".jsonl";
 		public const int StatusCheckIntervalSeconds = 60;
+		public const int FirstPromptMaxLength = 500;
+
+		/// <summary>
+		/// Derives the project slug that Claude Code uses for its session storage path.
+		/// All non-alphanumeric characters (except '-') are replaced with '-'.
+		/// Trailing path separators are trimmed first.
+		/// </summary>
+		public static string BuildProjectSlug(string workingDirectory)
+		{
+			var trimmed = workingDirectory.TrimEnd('\\', '/');
+			var chars = new char[trimmed.Length];
+			for (var i = 0; i < trimmed.Length; i++)
+			{
+				var c = trimmed[i];
+				chars[i] = char.IsLetterOrDigit(c) || c == '-' ? c : '-';
+			}
+			return new string(chars);
+		}
 	}
 }

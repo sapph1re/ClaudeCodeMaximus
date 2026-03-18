@@ -393,6 +393,76 @@ The CLI accepts short aliases (`opus`, `sonnet`, `haiku`) which automatically re
 
 ---
 
+### FR.13 — Session Import
+
+The application supports importing Claude Code sessions that were created outside of ClaudeMaximus (e.g., from the terminal, VS Code, JetBrains, or other tools). Import converts a Claude Code JSONL session file into the ClaudeMaximus session format and adds it to the session tree, preserving the Claude session ID for immediate resumability.
+
+**FR.13.1 — Entry point:** The context menu on Directory and Group nodes shall include an "Import Claude Session" option. This scopes the import to the working directory of the selected node.
+
+**FR.13.2 — Session discovery:** When the import picker opens, the application derives the project slug from the node's working directory (using the same algorithm as `ClaudeSessionStatusService`) and scans `~/.claude/projects/<slug>/` for `.jsonl` files. Each file represents a discoverable session.
+
+**FR.13.3 — Discovery data extraction:** For each discovered JSONL file, the following metadata is extracted via local file parsing (no Claude CLI calls):
+
+| Field | Source |
+|---|---|
+| Session ID | File name (UUID portion before `.jsonl`) |
+| Created | Timestamp of the first event in the file |
+| Last used | Timestamp of the last event in the file |
+| Message count | Count of `user` + `assistant` type events |
+| First user prompt | Content of the first `user` event's `message.content`, truncated to 500 characters |
+
+**FR.13.4 — Import picker dialog:** A dialog displays all discovered sessions as a scrollable list, sorted by last-used date (most recent first). Each row shows:
+- Session title (initially the truncated first user prompt; replaced by a Claude-generated title when available — see FR.13.8)
+- Date range (created → last used)
+- Message count
+- An "already imported" indicator if the session's ID matches any existing `ClaudeSessionId` in the tree (see FR.13.10)
+
+**FR.13.5 — Multi-select:** The picker supports multi-selection via checkboxes. An "Import Selected" button triggers import for all checked sessions. Already-imported sessions cannot be checked.
+
+**FR.13.6 — Search box:** The picker includes a search text box. Pressing Enter sends the query along with session summaries to the Claude CLI for semantic matching (see FR.13.9). Results are reordered by relevance. When the Claude CLI is unavailable, search falls back to case-insensitive substring matching against first user prompts.
+
+**FR.13.7 — JSONL parsing:** The import service parses a Claude Code JSONL file into ClaudeMaximus session entries. Parsing rules:
+
+| JSONL event type | Action |
+|---|---|
+| `user` | Extract `message.content` (string) → `USER` entry with original timestamp |
+| `assistant` | Extract `message.content[]` blocks where `type` is `"text"` → concatenate text → `ASSISTANT` entry with original timestamp |
+| `assistant` (tool_use blocks) | Extract `name` field from each `tool_use` block → `SYSTEM` entry formatted as `[Tool: <name>] <input summary>` with original timestamp |
+| `system`, `progress`, `file-history-snapshot`, `queue-operation`, `pr-link` | Skipped — no conversation content |
+
+Parsing is line-by-line with per-line error handling: malformed or unrecognised lines are skipped and logged. Files are opened with `FileShare.ReadWrite` to handle concurrent access from an active Claude process. The `thinking` block type within assistant events is skipped (internal reasoning, not conversation content).
+
+**FR.13.8 — Claude-powered title generation:** When the import picker opens, the application asynchronously generates titles for all discovered sessions by calling the Claude CLI in print mode:
+```
+claude -p --tools "" --no-session-persistence --model <model> --output-format json
+```
+The model is selected using a fallback order: Haiku (preferred for speed/cost), then the user's selected model from FR.12, then no `--model` flag (CLI default). Sessions are batched (up to 20 per call) with each session identified by its ID. The prompt requests a JSON response mapping session IDs to concise 3–6 word titles. As titles arrive, they progressively replace the first-prompt preview in the picker UI. If title generation fails, the truncated first prompt remains as the display text and the default session name.
+
+**FR.13.9 — Claude-powered search:** When the user enters a search query and presses Enter, the application sends session summaries (session IDs + truncated first prompts + message counts) along with the query to the Claude CLI (same print-mode invocation as FR.13.8). The prompt requests a JSON array of matching session IDs ranked by relevance. The picker reorders to show matches first. A spinner indicates search is in progress.
+
+**FR.13.10 — Duplicate detection:** Before displaying the picker, the application collects all `ClaudeSessionId` values from existing session nodes across the entire tree. Discovered sessions whose ID matches an existing node are marked "already imported" in the picker and cannot be selected for import.
+
+**FR.13.11 — Import execution:** For each selected session, the import process:
+1. Parses the JSONL file into session entries (per FR.13.7)
+2. Creates a new ClaudeMaximus session file (standard naming: `YYYY-MM-dd-HHmm-{6random}.txt`)
+3. Writes all parsed entries to the file using the standard session file format (`[timestamp] ROLE` headers)
+4. Creates a `SessionNodeModel` with: the generated title (or truncated first prompt) as `Name`, the new file as `FileName`, the working directory from the parent node, and the original Claude session ID as `ClaudeSessionId`
+5. Adds the session node to the tree under the selected parent (Directory or Group)
+6. Saves `appsettings.json`
+
+**FR.13.12 — Resumability after import:** Because the imported session retains the original `ClaudeSessionId`, the session is immediately resumable via `--resume` if the JSONL file still exists in `~/.claude/projects/<slug>/`. The existing resumability check (60-second poll) applies.
+
+**FR.13.13 — Fallback behaviour:**
+- Claude CLI unavailable for title generation → truncated first prompt used as session name
+- Claude CLI unavailable for search → case-insensitive substring match against first prompts
+- JSONL parse errors on individual lines → skip and log, import remaining entries
+- Empty JSONL file (no user/assistant events) → shown in picker but greyed out, not selectable
+- No JSONL files found for the slug → picker shows empty state with explanatory message
+
+**FR.13.14 — CLI process management for import:** All Claude CLI calls for title generation and search use timeouts, stderr capture, and structured error propagation. The process management reuses the existing `ClaudeProcessManager` infrastructure (shared `TryStartProcess` pattern). The `--tools ""` flag prevents the CLI from executing any tools. The `--no-session-persistence` flag prevents the CLI from creating session files for these utility calls. The model for assist calls follows a fallback order: Haiku (preferred), then the user's FR.12 model selection, then no `--model` flag (CLI default). This ensures the feature works regardless of the user's plan entitlements.
+
+---
+
 ## Out of Scope (Initial Version)
 
 - Session sharing or sync across machines

@@ -16,7 +16,7 @@ public sealed class ClaudeSessionStatusService : IClaudeSessionStatusService
 
 		try
 		{
-			var slug = BuildProjectSlug(workingDirectory);
+			var slug = Constants.ClaudeSessions.BuildProjectSlug(workingDirectory);
 			var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 			var sessionPath = Path.Combine(
 				userProfile,
@@ -37,21 +37,4 @@ public sealed class ClaudeSessionStatusService : IClaudeSessionStatusService
 		}
 	}
 
-	/// <summary>
-	/// Derives the project slug that Claude Code uses for its session storage path.
-	/// Claude CLI replaces all non-alphanumeric characters (except '-') with '-'.
-	/// Trailing path separators are trimmed first.
-	/// Example: C:\Projects\my_app → C--Projects-my-app
-	/// </summary>
-	private static string BuildProjectSlug(string workingDirectory)
-	{
-		var trimmed = workingDirectory.TrimEnd('\\', '/');
-		var chars = new char[trimmed.Length];
-		for (var i = 0; i < trimmed.Length; i++)
-		{
-			var c = trimmed[i];
-			chars[i] = char.IsLetterOrDigit(c) || c == '-' ? c : '-';
-		}
-		return new string(chars);
-	}
 }

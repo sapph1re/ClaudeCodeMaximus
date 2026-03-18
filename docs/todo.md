@@ -263,6 +263,45 @@
 
 ---
 
+## Phase 11 — Session Import (FR.13)
+
+### P11.1 JSONL Discovery & Parsing Service (FR.13.2, FR.13.3, FR.13.7) ✓
+- [DONE] `ClaudeSessionSummaryModel` model (SessionId, JsonlPath, Created, LastUsed, MessageCount, FirstUserPrompt, GeneratedTitle)
+- [DONE] `IClaudeSessionImportService` / `ClaudeSessionImportService`
+- [DONE] `DiscoverSessions(workingDirectory)` — derive slug, scan `~/.claude/projects/<slug>/` for `.jsonl` files, extract metadata
+- [DONE] `ParseJsonlSession(jsonlPath)` — line-by-line streaming parse, per-line try/catch, FileShare.ReadWrite
+- [DONE] Handle user events (string content), assistant events (text blocks + tool_use summaries), skip all other types
+- [DONE] Extract `BuildProjectSlug` to `Constants.ClaudeSessions` (shared with `ClaudeSessionStatusService`)
+- [DONE] Unit tests: parse happy path, corrupt lines, thinking blocks, non-conversation events, empty file, timestamps, tool_use with/without description, user content as array, slug building (12 tests)
+
+### P11.2 Claude Assist Service (FR.13.8, FR.13.9, FR.13.14)
+- [ ] `IClaudeAssistService` / `ClaudeAssistService`
+- [ ] Add `RunPrintModeAsync` to `IClaudeProcessManager` — shared infrastructure for non-interactive `claude -p` calls with timeout and stderr handling
+- [ ] `GenerateTitlesAsync(summaries)` — batch 10-20 per call, explicit ID→title JSON mapping in prompt
+- [ ] `SearchSessionsAsync(summaries, query)` — semantic search, returns ranked session IDs
+- [ ] Fallback: local substring match when CLI unavailable
+- [ ] Unit tests: title response parsing, search response parsing, fallback behaviour
+
+### P11.3 Import Picker UI (FR.13.4, FR.13.5, FR.13.6)
+- [ ] Import picker dialog/overlay — scrollable session list with checkboxes
+- [ ] Display: title (progressive), date range, message count, already-imported indicator
+- [ ] Search box with Enter-to-search, spinner during async operations
+- [ ] Multi-select with "Import Selected" button
+- [ ] Empty state when no sessions found
+- [ ] Already-imported sessions greyed out and not selectable
+- [ ] Empty JSONL sessions greyed out and not selectable (FR.13.13)
+- [ ] Empty state message when no JSONL files found for slug (FR.13.13)
+
+### P11.4 Tree Integration & Import Execution (FR.13.1, FR.13.10, FR.13.11, FR.13.12)
+- [ ] Context menu "Import Claude Session" on Directory and Group nodes
+- [ ] `SessionTreeViewModel.ImportSession()` — accepts pre-populated file + ClaudeSessionId
+- [ ] `ISessionFileService.WriteSessionFile(fileName, entries)` — write complete session from parsed entries
+- [ ] Duplicate detection: collect all ClaudeSessionId values from tree before showing picker
+- [ ] Import creates session file, session node, saves appsettings.json
+- [ ] Verify resumability works post-import (--resume with original session ID)
+
+---
+
 ## Backlog / Future
 
 - [ ] **P2.3 Search unit tests** — match / no-match / ancestor expansion
