@@ -799,7 +799,7 @@ public partial class SessionTreeView : UserControl
 		return picker.Result;
 	}
 
-	private static void ExecuteImport(
+	internal static void ExecuteImport(
 		SessionTreeViewModel vm,
 		ISessionFileService fileService,
 		IClaudeSessionImportService importService,

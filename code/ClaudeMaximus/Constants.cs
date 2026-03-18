@@ -93,6 +93,12 @@ Use the original timestamps from the conversation. Each entry starts with a [tim
 		public const string PreferredModel = "haiku";
 	}
 
+	public static class KeyBindings
+	{
+		public const string ImportSessions = "ImportSessions";
+		public const string CloseDialog = "CloseDialog";
+	}
+
 	public static class ClaudeSessions
 	{
 		public const string ClaudeHomeFolderName = ".claude";

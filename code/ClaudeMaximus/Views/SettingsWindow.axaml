@@ -179,6 +179,25 @@
 
             </Grid>
 
+            <Separator Margin="0,4"/>
+
+            <!-- Key bindings -->
+            <TextBlock Text="Keyboard Shortcuts" FontWeight="SemiBold"/>
+
+            <ItemsControl ItemsSource="{Binding KeyBindingEntries}" x:CompileBindings="False">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Grid ColumnDefinitions="*,*" Margin="0,4">
+                            <TextBlock Grid.Column="0" Text="{Binding DisplayName}"
+                                       VerticalAlignment="Center" FontSize="13"/>
+                            <TextBox Grid.Column="1" Text="{Binding Binding}"
+                                     FontFamily="Consolas" FontSize="12"
+                                     Margin="8,0,0,0"/>
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
             <!-- Save button -->
             <Button Content="Save"
                     HorizontalAlignment="Right"

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Threading.Tasks;
@@ -30,6 +31,9 @@ public partial class MainWindow : Window
 	{
 		InitializeComponent();
 		BuildNumberText.Text = GetBuildNumber();
+
+		// Global hotkey handler
+		KeyDown += OnGlobalKeyDown;
 
 		var ws = App.Services.GetRequiredService<IAppSettingsService>().Settings.Window;
 
@@ -196,6 +200,73 @@ public partial class MainWindow : Window
 		var sessionView = this.FindDescendantOfType<SessionView>();
 		if (sessionView?.DataContext is SessionViewModel vm)
 			vm.ScrollOffset = sessionView.FindDescendantOfType<ScrollViewer>()?.Offset.Y ?? 0;
+	}
+
+	// ── Global hotkeys ───────────────────────────────────────────────────────
+
+	private void OnGlobalKeyDown(object? sender, KeyEventArgs e)
+	{
+		var keyService = App.Services.GetRequiredService<IKeyBindingService>();
+
+		if (keyService.Matches(Constants.KeyBindings.ImportSessions, e))
+		{
+			e.Handled = true;
+			_ = HandleImportSessionsHotkey();
+			return;
+		}
+	}
+
+	private async Task HandleImportSessionsHotkey()
+	{
+		if (DataContext is not MainWindowViewModel vm)
+			return;
+
+		// Determine the working directory from the currently selected tree node
+		string? workingDirectory = null;
+		DirectoryNodeViewModel? dirNode = null;
+
+		var selectedSession = vm.SessionTree.SelectedSession;
+		if (selectedSession != null)
+		{
+			workingDirectory = selectedSession.Model.WorkingDirectory;
+			// Find the DirectoryNodeViewModel that owns this session
+			dirNode = FindDirectoryForPath(vm.SessionTree, workingDirectory);
+		}
+
+		if (workingDirectory == null || dirNode == null)
+			return;
+
+		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
+		var assistService = App.Services.GetRequiredService<IClaudeAssistService>();
+
+		var pickerVm = new ImportPickerViewModel(importService, assistService);
+		var alreadyImportedIds = vm.SessionTree.CollectAllClaudeSessionIds();
+		pickerVm.DiscoverSessions(workingDirectory, alreadyImportedIds);
+
+		var picker = new ImportPickerWindow { DataContext = pickerVm };
+		await picker.ShowDialog(this);
+
+		if (picker.Result == null || picker.Result.Count == 0)
+			return;
+
+		var fileService = App.Services.GetRequiredService<ISessionFileService>();
+
+		foreach (var item in picker.Result)
+			SessionTreeView.ExecuteImport(vm.SessionTree, fileService, importService, item, dirNode, null);
+	}
+
+	private static DirectoryNodeViewModel? FindDirectoryForPath(SessionTreeViewModel tree, string? workingDirectory)
+	{
+		if (workingDirectory == null)
+			return null;
+
+		foreach (var dir in tree.Directories)
+		{
+			if (string.Equals(dir.Path, workingDirectory, StringComparison.OrdinalIgnoreCase))
+				return dir;
+		}
+
+		return null;
 	}
 
 	// ── Overlay: confirm dialog ───────────────────────────────────────────────

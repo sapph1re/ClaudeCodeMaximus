@@ -40,4 +40,10 @@ public sealed class AppSettingsModel
 	/// When 0 (Default), no --model flag is passed to the CLI.
 	/// </summary>
 	public int SelectedModelIndex { get; set; }
+
+	/// <summary>
+	/// Configurable keyboard shortcuts. Populated with platform-appropriate defaults
+	/// on first load if missing.
+	/// </summary>
+	public KeyBindingsModel KeyBindings { get; set; } = KeyBindingsModel.CreateDefaults();
 }
