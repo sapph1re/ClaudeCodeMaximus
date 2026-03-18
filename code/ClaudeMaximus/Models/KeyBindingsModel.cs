@@ -26,11 +26,13 @@ public sealed class KeyBindingsModel
 		if (isMac)
 		{
 			model.Bindings[Constants.KeyBindings.ImportSessions] = "Cmd+I";
+			model.Bindings[Constants.KeyBindings.OpenSettings] = "Cmd+OemComma";
 			model.Bindings[Constants.KeyBindings.CloseDialog] = "Escape, Cmd+W";
 		}
 		else
 		{
 			model.Bindings[Constants.KeyBindings.ImportSessions] = "Ctrl+I";
+			model.Bindings[Constants.KeyBindings.OpenSettings] = "Ctrl+OemComma";
 			model.Bindings[Constants.KeyBindings.CloseDialog] = "Escape, Ctrl+W";
 		}
 

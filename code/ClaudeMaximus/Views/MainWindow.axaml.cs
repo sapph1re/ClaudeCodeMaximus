@@ -214,6 +214,14 @@ public partial class MainWindow : Window
 			_ = HandleImportSessionsHotkey();
 			return;
 		}
+
+		if (keyService.Matches(Constants.KeyBindings.OpenSettings, e))
+		{
+			e.Handled = true;
+			if (DataContext is MainWindowViewModel vm)
+				vm.OpenSettingsCommand.Execute().Subscribe();
+			return;
+		}
 	}
 
 	private async Task HandleImportSessionsHotkey()

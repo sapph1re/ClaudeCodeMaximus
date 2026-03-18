@@ -96,6 +96,7 @@ Use the original timestamps from the conversation. Each entry starts with a [tim
 	public static class KeyBindings
 	{
 		public const string ImportSessions = "ImportSessions";
+		public const string OpenSettings = "OpenSettings";
 		public const string CloseDialog = "CloseDialog";
 	}
 
