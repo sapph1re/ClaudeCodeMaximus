@@ -353,23 +353,24 @@ public sealed class ImportPickerViewModel : ViewModelBase
 		try
 		{
 			var entries = _importService.ParseJsonlSession(item.Summary.JsonlPath);
-			var count = 0;
 
+			// Collect the last N user/assistant entries (most recent = most memorable)
+			var conversationEntries = new List<(string Role, string Content)>();
 			foreach (var entry in entries)
 			{
 				if (entry.Role is not (Constants.SessionFile.RoleUser or Constants.SessionFile.RoleAssistant))
 					continue;
+				conversationEntries.Add((entry.Role, entry.Content));
+			}
 
-				// Truncate long content for preview
-				var content = entry.Content;
+			// Take the tail
+			var startIndex = Math.Max(0, conversationEntries.Count - PreviewEntryLimit);
+			for (var i = startIndex; i < conversationEntries.Count; i++)
+			{
+				var content = conversationEntries[i].Content;
 				if (content.Length > 300)
 					content = content[..297] + "...";
-
-				PreviewEntries.Add(new PreviewEntryViewModel(entry.Role, content));
-				count++;
-
-				if (count >= PreviewEntryLimit)
-					break;
+				PreviewEntries.Add(new PreviewEntryViewModel(conversationEntries[i].Role, content));
 			}
 		}
 		catch (Exception ex)
