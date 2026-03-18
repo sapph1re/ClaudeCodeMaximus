@@ -251,7 +251,7 @@
 
 ---
 
-## Phase 10 — Input Command Bar & Model Selection (FR.12) ✓ DONE
+## Phase 10 — Input Command Bar & Model Selection (FR.12)
 
 ### P10.1 Model Selection & Command Bar ✓
 - [DONE] Settings toggle button (gear icon) below Send button in input area (FR.12.1)
@@ -260,6 +260,15 @@
 - [DONE] `--model` flag passed to all `SendMessageAsync` calls when non-default model selected (FR.12.5)
 - [DONE] `IClaudeProcessManager.SendMessageAsync` accepts optional `model` parameter
 - [DONE] `ClaudeProcessManager.BuildArguments` appends `--model` when provided
+
+### P10.2 Profile Selection (FR.12.6–12.10) ✓
+- [DONE] `ClaudeProfileModel` — ProfileId + DisplayName (FR.12.8)
+- [DONE] `IClaudeProfileService` / `ClaudeProfileService` — auth status queries + interactive auth login (FR.12.7)
+- [DONE] Profile list and `SelectedProfileIndex` in `AppSettingsModel` (FR.12.8)
+- [DONE] Profile ComboBox in command bar (right of model selector) with Default + stored profiles + "New..." (FR.12.6)
+- [DONE] "New..." triggers visible-terminal auth login, resolves email, adds profile (FR.12.7)
+- [DONE] `--profile` flag passed to all `SendMessageAsync` calls when non-default profile selected (FR.12.9)
+- [DONE] Default profile email resolved on first session load (FR.12.10)
 
 ---
 

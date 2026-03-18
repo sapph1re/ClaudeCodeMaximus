@@ -36,9 +36,10 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		string userMessage,
 		Action<ClaudeStreamEvent> onEvent,
 		string? model = null,
+		string? profile = null,
 		CancellationToken cancellationToken = default)
 	{
-		var args = BuildArguments(sessionId, model);
+		var args = BuildArguments(sessionId, model, profile);
 		_log.Debug("Attempting to spawn claude. Path={ClaudePath} Args={Args} WorkDir={WorkDir}",
 			claudePath, args, workingDirectory);
 
@@ -116,7 +117,7 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		}
 	}
 
-	private static string BuildArguments(string? sessionId, string? model = null)
+	private static string BuildArguments(string? sessionId, string? model = null, string? profile = null)
 	{
 		// -p (--print) forces non-interactive single-prompt mode.
 		// --verbose is required by claude when combining --print with stream-json output.
@@ -126,6 +127,8 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 			args += $" --resume {sessionId}";
 		if (!string.IsNullOrEmpty(model))
 			args += $" --model {model}";
+		if (!string.IsNullOrEmpty(profile))
+			args += $" --profile {profile}";
 		return args;
 	}
 

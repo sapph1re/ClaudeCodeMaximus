@@ -16,6 +16,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private readonly IClaudeProcessManager _processManager;
 	private readonly IDraftService _draftService;
 	private readonly ICodeIndexService _codeIndexService;
+	private readonly IClaudeProfileService _profileService;
 	private readonly ISelfUpdateService _selfUpdate;
 	private readonly Dictionary<string, SessionViewModel> _sessionCache = new();
 	private double _splitterPosition;
@@ -111,6 +112,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		IClaudeProcessManager processManager,
 		IDraftService draftService,
 		ICodeIndexService codeIndexService,
+		IClaudeProfileService profileService,
 		ISelfUpdateService selfUpdate,
 		SessionTreeViewModel sessionTree)
 	{
@@ -119,6 +121,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		_processManager   = processManager;
 		_draftService     = draftService;
 		_codeIndexService = codeIndexService;
+		_profileService   = profileService;
 		_selfUpdate       = selfUpdate;
 		SessionTree       = sessionTree;
 		_splitterPosition = appSettings.Settings.Window.SplitterPosition;
@@ -154,8 +157,9 @@ public sealed class MainWindowViewModel : ViewModelBase
 
 		if (!_sessionCache.TryGetValue(node.FileName, out var vm))
 		{
-			vm = new SessionViewModel(node, _fileService, _processManager, _appSettings, _draftService, _codeIndexService);
+			vm = new SessionViewModel(node, _fileService, _processManager, _appSettings, _draftService, _codeIndexService, _profileService);
 			vm.LoadFromFile();
+			vm.ResolveDefaultProfileEmail();
 			_sessionCache[node.FileName] = vm;
 		}
 

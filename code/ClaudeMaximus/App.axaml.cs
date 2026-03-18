@@ -82,6 +82,7 @@ public partial class App : Application
 		services.AddSingleton<ISessionSearchService, SessionSearchService>();
 		services.AddSingleton<IGitOriginService, GitOriginService>();
 		services.AddSingleton<ICodeIndexService, CodeIndexService>();
+		services.AddSingleton<IClaudeProfileService, ClaudeProfileService>();
 		services.AddSingleton<SessionTreeViewModel>();
 		services.AddSingleton<MainWindowViewModel>();
 		services.AddTransient<SettingsViewModel>();
