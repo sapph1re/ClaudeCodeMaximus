@@ -28,6 +28,18 @@ public interface IClaudeProcessManager
 		string? model = null,
 		CancellationToken cancellationToken = default);
 
+	/// <summary>
+	/// Runs claude in print mode for non-interactive utility calls (title generation, search).
+	/// Returns the raw stdout text. Uses --tools "" --no-session-persistence --output-format json.
+	/// Returns null if the process fails to start or exits with an error.
+	/// </summary>
+	Task<string?> RunPrintModeAsync(
+		string claudePath,
+		string prompt,
+		string? model = null,
+		int timeoutMs = 60000,
+		CancellationToken cancellationToken = default);
+
 	/// <summary>Kills all active claude processes immediately.</summary>
 	void TerminateAll();
 }

@@ -86,6 +86,13 @@ Use the original timestamps from the conversation. Each entry starts with a [tim
 """;
 	}
 
+	public static class ClaudeAssist
+	{
+		public const int TitleBatchSize = 20;
+		public const int TimeoutMs = 60000;
+		public const string PreferredModel = "haiku";
+	}
+
 	public static class ClaudeSessions
 	{
 		public const string ClaudeHomeFolderName = ".claude";
