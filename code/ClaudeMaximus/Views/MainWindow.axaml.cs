@@ -31,6 +31,18 @@ public partial class MainWindow : Window
 		InitializeComponent();
 		BuildNumberText.Text = GetBuildNumber();
 
+		// On macOS, SystemDecorations="BorderOnly" (set in AXAML) does not provide
+		// native resize handles. Switch to Full decorations with the client area
+		// extended into the title bar so the custom title bar still renders, while
+		// the native window frame supplies resize cursors at all edges.
+		if (OperatingSystem.IsMacOS())
+		{
+			SystemDecorations = SystemDecorations.Full;
+			ExtendClientAreaToDecorationsHint = true;
+			ExtendClientAreaChromeHints = Avalonia.Platform.ExtendClientAreaChromeHints.NoChrome;
+			ExtendClientAreaTitleBarHeightHint = -1;
+		}
+
 		var ws = App.Services.GetRequiredService<IAppSettingsService>().Settings.Window;
 
 		Width  = ws.Width;
