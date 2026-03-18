@@ -24,6 +24,12 @@ public interface ISessionFileService
 	void RewriteSessionFile(string fileName, string content);
 
 	/// <summary>
+	/// Writes a complete session file from a list of parsed session entries.
+	/// Used for session import (FR.13.11). The file is created and written atomically.
+	/// </summary>
+	void WriteSessionFile(string fileName, IReadOnlyList<SessionEntryModel> entries);
+
+	/// <summary>
 	/// Scans all session files and repairs any that were corrupted by the auto-compaction bug
 	/// (raw text without [timestamp] ROLE headers). Returns the count of repaired files.
 	/// </summary>

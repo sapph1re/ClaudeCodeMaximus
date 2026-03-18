@@ -59,6 +59,29 @@ public sealed class SessionFileService : ISessionFileService
 		File.Move(tmpPath, fullPath, overwrite: true);
 	}
 
+	public void WriteSessionFile(string fileName, IReadOnlyList<SessionEntryModel> entries)
+	{
+		var sb = new StringBuilder();
+		foreach (var entry in entries)
+		{
+			if (entry.IsCompaction)
+			{
+				sb.AppendLine(FormatHeader(entry.Timestamp, Constants.SessionFile.RoleCompaction));
+			}
+			else
+			{
+				sb.AppendLine(FormatHeader(entry.Timestamp, entry.Role));
+				sb.AppendLine(entry.Content);
+				sb.AppendLine();
+			}
+		}
+
+		var fullPath = GetFullPath(fileName);
+		var tmpPath = fullPath + ".tmp";
+		File.WriteAllText(tmpPath, sb.ToString(), Encoding.UTF8);
+		File.Move(tmpPath, fullPath, overwrite: true);
+	}
+
 	public int RepairCorruptedCompactions()
 	{
 		var root = _appSettings.Settings.SessionFilesRoot;

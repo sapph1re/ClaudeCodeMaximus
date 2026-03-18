@@ -105,4 +105,70 @@ public sealed class SessionFileServiceTests : IDisposable
 		Assert.True(_sut.SessionFileExists(fileName));
 		Assert.False(_sut.SessionFileExists("nonexistent-2026-01-01-0000-aaaaaa.txt"));
 	}
+
+	[Fact]
+	public void WriteSessionFile_WritesEntries_ThenReadReturnsAll()
+	{
+		var fileName = _sut.CreateSessionFile();
+		var entries = new[]
+		{
+			new SessionEntryModel
+			{
+				Timestamp = new DateTimeOffset(2026, 3, 10, 14, 30, 0, TimeSpan.Zero),
+				Role = Constants.SessionFile.RoleUser,
+				Content = "Hello Claude",
+			},
+			new SessionEntryModel
+			{
+				Timestamp = new DateTimeOffset(2026, 3, 10, 14, 30, 5, TimeSpan.Zero),
+				Role = Constants.SessionFile.RoleAssistant,
+				Content = "Hello! How can I help?",
+			},
+		};
+
+		_sut.WriteSessionFile(fileName, entries);
+
+		var readBack = _sut.ReadEntries(fileName);
+		Assert.Equal(2, readBack.Count);
+		Assert.Equal(Constants.SessionFile.RoleUser, readBack[0].Role);
+		Assert.Equal("Hello Claude", readBack[0].Content);
+		Assert.Equal(Constants.SessionFile.RoleAssistant, readBack[1].Role);
+		Assert.Equal("Hello! How can I help?", readBack[1].Content);
+	}
+
+	[Fact]
+	public void WriteSessionFile_WithCompactionEntry_RoundTrips()
+	{
+		var fileName = _sut.CreateSessionFile();
+		var entries = new[]
+		{
+			new SessionEntryModel
+			{
+				Timestamp = new DateTimeOffset(2026, 3, 10, 14, 0, 0, TimeSpan.Zero),
+				Role = Constants.SessionFile.RoleUser,
+				Content = "Before compaction",
+			},
+			new SessionEntryModel
+			{
+				Timestamp = new DateTimeOffset(2026, 3, 10, 14, 5, 0, TimeSpan.Zero),
+				Role = Constants.SessionFile.RoleCompaction,
+				Content = string.Empty,
+			},
+			new SessionEntryModel
+			{
+				Timestamp = new DateTimeOffset(2026, 3, 10, 14, 10, 0, TimeSpan.Zero),
+				Role = Constants.SessionFile.RoleAssistant,
+				Content = "After compaction",
+			},
+		};
+
+		_sut.WriteSessionFile(fileName, entries);
+
+		var readBack = _sut.ReadEntries(fileName);
+		Assert.Equal(3, readBack.Count);
+		Assert.Equal(Constants.SessionFile.RoleUser, readBack[0].Role);
+		Assert.True(readBack[1].IsCompaction);
+		Assert.Equal(Constants.SessionFile.RoleAssistant, readBack[2].Role);
+		Assert.Equal("After compaction", readBack[2].Content);
+	}
 }

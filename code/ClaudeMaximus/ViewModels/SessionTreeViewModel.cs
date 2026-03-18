@@ -153,6 +153,74 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		return vm;
 	}
 
+	// --- Import operations ---
+
+	/// <summary>
+	/// Creates a session node from imported data and adds it to the tree.
+	/// Used by session import (FR.13.11).
+	/// </summary>
+	public SessionNodeViewModel ImportSession(
+		DirectoryNodeViewModel parent, string name, string fileName, string claudeSessionId)
+	{
+		var model = new SessionNodeModel
+		{
+			Name = name,
+			FileName = fileName,
+			WorkingDirectory = parent.Path,
+			ClaudeSessionId = claudeSessionId,
+		};
+		var vm = new SessionNodeViewModel(model);
+		parent.AddSession(vm);
+		_appSettings.Save();
+		return vm;
+	}
+
+	/// <summary>
+	/// Creates a session node from imported data and adds it to a group.
+	/// </summary>
+	public SessionNodeViewModel ImportSessionToGroup(
+		GroupNodeViewModel parent, string name, string fileName, string claudeSessionId)
+	{
+		var model = new SessionNodeModel
+		{
+			Name = name,
+			FileName = fileName,
+			WorkingDirectory = parent.WorkingDirectory,
+			ClaudeSessionId = claudeSessionId,
+		};
+		var vm = new SessionNodeViewModel(model);
+		parent.AddSession(vm);
+		_appSettings.Save();
+		return vm;
+	}
+
+	/// <summary>
+	/// Collects all ClaudeSessionId values from the entire tree for duplicate detection.
+	/// </summary>
+	public IReadOnlySet<string> CollectAllClaudeSessionIds()
+	{
+		var ids = new HashSet<string>();
+		foreach (var dir in Directories)
+			CollectIdsFromChildren(dir.Children, ids);
+		return ids;
+	}
+
+	private static void CollectIdsFromChildren(ObservableCollection<ViewModelBase> children, HashSet<string> ids)
+	{
+		foreach (var child in children)
+		{
+			switch (child)
+			{
+				case SessionNodeViewModel session when session.Model.ClaudeSessionId is not null:
+					ids.Add(session.Model.ClaudeSessionId);
+					break;
+				case GroupNodeViewModel group:
+					CollectIdsFromChildren(group.Children, ids);
+					break;
+			}
+		}
+	}
+
 	// --- Rename operations ---
 
 	public void RenameGroup(GroupNodeViewModel group, string newName)

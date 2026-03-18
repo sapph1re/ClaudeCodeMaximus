@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using Avalonia;
@@ -7,8 +8,11 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using ClaudeMaximus.Services;
 using ClaudeMaximus.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
 using ReactiveUI;
+using Serilog;
 
 namespace ClaudeMaximus.Views;
 
@@ -566,12 +570,20 @@ public partial class SessionTreeView : UserControl
 				await AddSessionToDirectoryAsync(vm, dir, ownerWindow);
 				break;
 
+			case "ImportToDirectory" when ownerVm is DirectoryNodeViewModel dir:
+				await ImportToDirectoryAsync(vm, dir, ownerWindow);
+				break;
+
 			case "AddGroupToGroup" when ownerVm is GroupNodeViewModel grp:
 				await AddGroupToGroupAsync(vm, grp, ownerWindow);
 				break;
 
 			case "AddSessionToGroup" when ownerVm is GroupNodeViewModel grp:
 				await AddSessionToGroupAsync(vm, grp, ownerWindow);
+				break;
+
+			case "ImportToGroup" when ownerVm is GroupNodeViewModel grp:
+				await ImportToGroupAsync(vm, grp, ownerWindow);
 				break;
 
 			case "RenameGroup" when ownerVm is GroupNodeViewModel grp:
@@ -735,5 +747,104 @@ public partial class SessionTreeView : UserControl
 				return true;
 		}
 		return false;
+	}
+
+	// ── Session import ──────────────────────────────────────────────────────
+
+	private static async Task ImportToDirectoryAsync(
+		SessionTreeViewModel vm, DirectoryNodeViewModel dir, Window? ownerWindow)
+	{
+		var selected = await ShowImportPickerAsync(dir.Path, vm, ownerWindow);
+		if (selected == null || selected.Count == 0)
+			return;
+
+		var fileService = App.Services.GetRequiredService<ISessionFileService>();
+		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
+
+		foreach (var item in selected)
+			ExecuteImport(vm, fileService, importService, item, dir, null);
+	}
+
+	private static async Task ImportToGroupAsync(
+		SessionTreeViewModel vm, GroupNodeViewModel grp, Window? ownerWindow)
+	{
+		var selected = await ShowImportPickerAsync(grp.WorkingDirectory, vm, ownerWindow);
+		if (selected == null || selected.Count == 0)
+			return;
+
+		var fileService = App.Services.GetRequiredService<ISessionFileService>();
+		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
+
+		foreach (var item in selected)
+			ExecuteImport(vm, fileService, importService, item, null, grp);
+	}
+
+	private static async Task<IReadOnlyList<ImportSessionItemViewModel>?> ShowImportPickerAsync(
+		string workingDirectory, SessionTreeViewModel vm, Window? ownerWindow)
+	{
+		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
+		var assistService = App.Services.GetRequiredService<IClaudeAssistService>();
+
+		var pickerVm = new ImportPickerViewModel(importService, assistService);
+		var alreadyImportedIds = vm.CollectAllClaudeSessionIds();
+		pickerVm.DiscoverSessions(workingDirectory, alreadyImportedIds);
+
+		var picker = new ImportPickerWindow { DataContext = pickerVm };
+
+		if (ownerWindow != null)
+			await picker.ShowDialog(ownerWindow);
+		else
+			picker.Show();
+
+		return picker.Result;
+	}
+
+	private static void ExecuteImport(
+		SessionTreeViewModel vm,
+		ISessionFileService fileService,
+		IClaudeSessionImportService importService,
+		ImportSessionItemViewModel item,
+		DirectoryNodeViewModel? dirParent,
+		GroupNodeViewModel? grpParent)
+	{
+		try
+		{
+			// Parse the JSONL file into session entries
+			var entries = importService.ParseJsonlSession(item.Summary.JsonlPath);
+			if (entries.Count == 0)
+				return;
+
+			// Create a new session file
+			var fileName = fileService.CreateSessionFile();
+
+			// Write all parsed entries
+			fileService.WriteSessionFile(fileName, entries);
+
+			// Determine the session name
+			var name = item.Summary.GeneratedTitle
+				?? TruncateForSessionName(item.Summary.FirstUserPrompt)
+				?? "Imported Session";
+
+			// Add to tree
+			if (dirParent != null)
+				vm.ImportSession(dirParent, name, fileName, item.SessionId);
+			else if (grpParent != null)
+				vm.ImportSessionToGroup(grpParent, name, fileName, item.SessionId);
+		}
+		catch (Exception ex)
+		{
+			Log.Warning(ex, "ExecuteImport: failed to import session {SessionId}", item.SessionId);
+		}
+	}
+
+	private static string? TruncateForSessionName(string? prompt)
+	{
+		if (string.IsNullOrWhiteSpace(prompt))
+			return null;
+
+		var firstLine = prompt.Split('\n')[0].Trim();
+		if (firstLine.Length > 60)
+			return firstLine[..57] + "...";
+		return firstLine;
 	}
 }
