@@ -256,8 +256,8 @@ public sealed class SessionViewModel : ViewModelBase
 		}
 	}
 
-	/// <summary>Returns the profile ID for --profile flag, or null if Default is selected.</summary>
-	public string? SelectedProfileId
+	/// <summary>Returns the CLAUDE_CONFIG_DIR path for the selected profile, or null if Default is selected.</summary>
+	public string? SelectedProfileConfigDir
 	{
 		get
 		{
@@ -265,9 +265,9 @@ public sealed class SessionViewModel : ViewModelBase
 				return null;
 			var profiles = _appSettings.Settings.Profiles;
 			var profileListIndex = _selectedProfileIndex - 1;
-			return profileListIndex >= 0 && profileListIndex < profiles.Count
-				? profiles[profileListIndex].ProfileId
-				: null;
+			if (profileListIndex < 0 || profileListIndex >= profiles.Count)
+				return null;
+			return System.IO.Path.Combine(_profileService.ProfilesRootDirectory, profiles[profileListIndex].ProfileId);
 		}
 	}
 
@@ -426,7 +426,7 @@ public sealed class SessionViewModel : ViewModelBase
 				userMessage:      messageToSend,
 				onEvent:          HandleStreamEvent,
 				model:            SelectedModelId,
-				profile:          SelectedProfileId);
+				profileConfigDir: SelectedProfileConfigDir);
 
 			if (_needsContextRetry)
 			{
@@ -455,7 +455,7 @@ public sealed class SessionViewModel : ViewModelBase
 					userMessage:      enrichedMessage,
 					onEvent:          HandleStreamEvent,
 					model:            SelectedModelId,
-				profile:          SelectedProfileId);
+				profileConfigDir: SelectedProfileConfigDir);
 			}
 
 			// Post-response: handle Clear (FR.11.7)
@@ -682,7 +682,7 @@ public sealed class SessionViewModel : ViewModelBase
 			sessionId:        _node.Model.ClaudeSessionId,
 			userMessage:      Constants.Instructions.CompactionPrompt,
 			model:            SelectedModelId,
-			profile:          SelectedProfileId,
+			profileConfigDir: SelectedProfileConfigDir,
 			onEvent:          evt =>
 			{
 				if (evt.Type == "assistant" && !string.IsNullOrWhiteSpace(evt.Content))
@@ -758,7 +758,7 @@ public sealed class SessionViewModel : ViewModelBase
 			sessionId:        _node.Model.ClaudeSessionId,
 			userMessage:      prompt,
 			model:            SelectedModelId,
-			profile:          SelectedProfileId,
+			profileConfigDir: SelectedProfileConfigDir,
 			onEvent:          evt =>
 			{
 				// Capture session ID updates but don't write to file or UI
@@ -839,18 +839,21 @@ public sealed class SessionViewModel : ViewModelBase
 			for (var i = 2; existingIds.Contains(profileId); i++)
 				profileId = $"profile_{i}";
 
+			// Build the config directory path for this profile
+			var configDir = System.IO.Path.Combine(_profileService.ProfilesRootDirectory, profileId);
+
 			// Launch interactive auth in a visible terminal
 			Messages.Add(new MessageEntryViewModel
 			{
 				Role      = Constants.SessionFile.RoleSystem,
-				Content   = $"Launching auth login for new profile '{profileId}'... Complete authentication in the opened window.",
+				Content   = $"Launching auth login for new profile... Complete authentication in the opened window.",
 				Timestamp = DateTimeOffset.UtcNow,
 			});
 
-			await _profileService.LaunchAuthLoginAsync(_appSettings.Settings.ClaudePath, profileId);
+			await _profileService.LaunchAuthLoginAsync(_appSettings.Settings.ClaudePath, configDir);
 
 			// Verify auth succeeded by querying the profile status
-			var email = await _profileService.GetAccountEmailAsync(_appSettings.Settings.ClaudePath, profileId);
+			var email = await _profileService.GetAccountEmailAsync(_appSettings.Settings.ClaudePath, configDir);
 			if (string.IsNullOrEmpty(email))
 			{
 				Messages.Add(new MessageEntryViewModel

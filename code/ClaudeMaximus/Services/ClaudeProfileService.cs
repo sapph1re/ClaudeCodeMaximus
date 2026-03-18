@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -13,13 +14,17 @@ public sealed class ClaudeProfileService : IClaudeProfileService
 {
 	private static readonly ILogger _log = Log.ForContext<ClaudeProfileService>();
 
-	public async Task<string?> GetAccountEmailAsync(string claudePath, string? profileId)
-	{
-		var args = "auth status";
-		if (!string.IsNullOrEmpty(profileId))
-			args += $" --profile {profileId}";
+	public string ProfilesRootDirectory { get; }
 
-		var output = await RunClaudeCommandAsync(claudePath, args);
+	public ClaudeProfileService()
+	{
+		var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+		ProfilesRootDirectory = Path.Combine(appData, Constants.AppDataFolderName, Constants.ProfilesFolderName);
+	}
+
+	public async Task<string?> GetAccountEmailAsync(string claudePath, string? configDir)
+	{
+		var output = await RunClaudeCommandAsync(claudePath, "auth status", configDir);
 		if (string.IsNullOrWhiteSpace(output))
 			return null;
 
@@ -34,17 +39,18 @@ public sealed class ClaudeProfileService : IClaudeProfileService
 		}
 		catch (JsonException ex)
 		{
-			_log.Warning(ex, "Failed to parse claude auth status output for profile {ProfileId}", profileId);
+			_log.Warning(ex, "Failed to parse claude auth status output for configDir {ConfigDir}", configDir);
 		}
 
 		return null;
 	}
 
-	public async Task<bool> LaunchAuthLoginAsync(string claudePath, string profileId)
+	public async Task LaunchAuthLoginAsync(string claudePath, string configDir)
 	{
-		var args = $"auth login --profile {profileId}";
+		_log.Information("Launching interactive auth login with configDir {ConfigDir}", configDir);
 
-		_log.Information("Launching interactive auth login for profile {ProfileId}", profileId);
+		// Ensure the config directory exists
+		Directory.CreateDirectory(configDir);
 
 		Process? process;
 
@@ -56,39 +62,35 @@ public sealed class ClaudeProfileService : IClaudeProfileService
 			// the user can complete browser-based auth. Using cmd.exe /c with
 			// & pause keeps the window open until auth finishes and the user
 			// presses a key.
-			var cmdArgs = $"/c \"\"{claudePath}\" {args} & pause\"";
+			var cmdArgs = $"/c \"set CLAUDE_CONFIG_DIR={configDir} && \"{claudePath}\" auth login & pause\"";
 			process = TryStartVisibleProcess("cmd.exe", cmdArgs);
 		}
 		else
 		{
-			process = TryStartVisibleProcess(claudePath, args);
+			process = TryStartVisibleProcess(claudePath, "auth login", configDir);
 		}
 
 		if (process == null)
 		{
-			_log.Error("Failed to start claude auth login for profile {ProfileId}", profileId);
-			return false;
+			_log.Error("Failed to start claude auth login for configDir {ConfigDir}", configDir);
+			return;
 		}
 
 		using (process)
 		{
 			await process.WaitForExitAsync();
-			var exitCode = process.ExitCode;
-			_log.Information("Auth login for profile {ProfileId} exited with code {ExitCode}", profileId, exitCode);
-			// cmd.exe /c with & pause always exits 0 after the user presses a key,
-			// so we verify auth succeeded by checking status afterward.
-			return true;
+			_log.Information("Auth login for configDir {ConfigDir} exited with code {ExitCode}", configDir, process.ExitCode);
 		}
 	}
 
-	private async Task<string?> RunClaudeCommandAsync(string claudePath, string args)
+	private async Task<string?> RunClaudeCommandAsync(string claudePath, string args, string? configDir)
 	{
-		Process? process = TryStartHiddenProcess(claudePath, args);
+		Process? process = TryStartHiddenProcess(claudePath, args, configDir);
 
 		if (process == null && OperatingSystem.IsWindows())
 		{
 			var cmdArgs = $"/c \"{claudePath}\" {args}";
-			process = TryStartHiddenProcess("cmd.exe", cmdArgs);
+			process = TryStartHiddenProcess("cmd.exe", cmdArgs, configDir);
 		}
 
 		if (process == null)
@@ -102,7 +104,7 @@ public sealed class ClaudeProfileService : IClaudeProfileService
 		}
 	}
 
-	private static Process? TryStartHiddenProcess(string fileName, string arguments)
+	private static Process? TryStartHiddenProcess(string fileName, string arguments, string? configDir)
 	{
 		var psi = new ProcessStartInfo(fileName, arguments)
 		{
@@ -112,6 +114,9 @@ public sealed class ClaudeProfileService : IClaudeProfileService
 			CreateNoWindow         = true,
 			StandardOutputEncoding = Encoding.UTF8,
 		};
+
+		if (!string.IsNullOrEmpty(configDir))
+			psi.Environment["CLAUDE_CONFIG_DIR"] = configDir;
 
 		try
 		{
@@ -124,13 +129,17 @@ public sealed class ClaudeProfileService : IClaudeProfileService
 		}
 	}
 
-	private static Process? TryStartVisibleProcess(string fileName, string arguments)
+	private static Process? TryStartVisibleProcess(string fileName, string arguments, string? configDir = null)
 	{
 		var psi = new ProcessStartInfo(fileName, arguments)
 		{
 			UseShellExecute = true,
 			CreateNoWindow  = false,
 		};
+
+		// Note: UseShellExecute=true does not support psi.Environment modifications.
+		// For visible processes, CLAUDE_CONFIG_DIR is set via "set" command in the
+		// cmd.exe /c wrapper on Windows, or passed directly on other platforms.
 
 		try
 		{

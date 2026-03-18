@@ -7,6 +7,7 @@ public static class Constants
 	public const string SettingsFileName = "appsettings.json";
 	public const string DefaultSessionsFolderName = "sessions";
 	public const string DraftsFolderName = "drafts";
+	public const string ProfilesFolderName = "profiles";
 	public const string DraftFileExtension = ".draft";
 	public const int DraftDebounceMilliseconds = 500;
 	public const int AutocompleteDebounceMilliseconds = 150;

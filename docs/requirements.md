@@ -391,22 +391,22 @@ The CLI accepts short aliases (`opus`, `sonnet`, `haiku`) which automatically re
 
 **FR.12.5 — Model flag injection:** When a non-default model is selected, the `--model <id>` flag is appended to the `claude` CLI arguments for all process spawns (user messages, context retries, compaction, and mid-run corrections).
 
-**FR.12.6 — Profile selection:** The command bar contains a profile selector (ComboBox) to the right of the model selector. Each profile corresponds to a `--profile` flag on the `claude` CLI, enabling separate authentication contexts per profile. The dropdown displays the account email as the display text. A "Default" entry (index 0, no `--profile` flag) uses the CLI's default authentication. A "New..." entry at the bottom of the list triggers profile creation (FR.12.7).
+**FR.12.6 — Profile selection:** The command bar contains a profile selector (ComboBox) to the right of the model selector. Each profile uses a separate `CLAUDE_CONFIG_DIR` directory, giving it an isolated authentication context with the Claude CLI. The dropdown displays the account email as the display text. A "Default" entry (index 0, no env var override) uses the CLI's default authentication. A "New..." entry at the bottom of the list triggers profile creation (FR.12.7).
 
 **FR.12.7 — Profile creation flow:** When "New..." is selected in the profile dropdown:
-1. A unique profile ID is generated (`profile_1`, `profile_2`, etc.)
-2. A visible console window is spawned running `claude auth login --profile <id>` for interactive browser-based authentication. On Windows, the command is wrapped via `cmd.exe /c "claude auth login --profile <id> & pause"` because the `.cmd` wrapper would otherwise exit immediately before the user completes browser-based auth. The `pause` keeps the window open until the user presses a key.
-3. After the console process exits, `claude auth status --profile <id>` is queried to verify authentication succeeded and retrieve the account email. If the email query fails (auth was not completed), the profile is not added and a failure message is shown.
+1. A unique profile ID is generated (`profile_1`, `profile_2`, etc.) and a corresponding config directory created under `%APPDATA%\ClaudeMaximus\profiles\<profileId>\`
+2. A visible console window is spawned running `claude auth login` with `CLAUDE_CONFIG_DIR` set to the profile's config directory. On Windows, the command is wrapped via `cmd.exe /c "set CLAUDE_CONFIG_DIR=... && claude auth login & pause"` because the `.cmd` wrapper would otherwise exit immediately before the user completes browser-based auth. The `pause` keeps the window open until the user presses a key.
+3. After the console process exits, `claude auth status` is queried (with `CLAUDE_CONFIG_DIR` set) to verify authentication succeeded and retrieve the account email. If the email query fails (auth was not completed), the profile is not added and a failure message is shown.
 4. The profile is added to the persisted list with the email as display name
 5. The new profile is automatically selected
 
 The dropdown selection reverts to the previous value while auth is in progress, preventing the "New..." item from being persisted as the selected index.
 
-**FR.12.8 — Profile persistence:** Profiles are stored in `appsettings.json` as a list of `ClaudeProfileModel` objects with `ProfileId` (string, used for `--profile` flag) and `DisplayName` (string, typically the account email). The selected profile index is a global setting (`SelectedProfileIndex`). Index 0 = Default (no flag), indices 1..N map to stored profiles.
+**FR.12.8 — Profile persistence:** Profiles are stored in `appsettings.json` as a list of `ClaudeProfileModel` objects with `ProfileId` (string, used as the config subdirectory name) and `DisplayName` (string, typically the account email). The selected profile index is a global setting (`SelectedProfileIndex`). Index 0 = Default (no env var), indices 1..N map to stored profiles. Each profile's auth state lives in `%APPDATA%\ClaudeMaximus\profiles\<ProfileId>\`.
 
-**FR.12.9 — Profile flag injection:** When a non-default profile is selected, `--profile <id>` is appended to the `claude` CLI arguments for all process spawns (user messages, context retries, compaction, and mid-run corrections).
+**FR.12.9 — Profile config dir injection:** When a non-default profile is selected, the `CLAUDE_CONFIG_DIR` environment variable is set to the profile's config directory on all spawned `claude` CLI processes (user messages, context retries, compaction, and mid-run corrections). This isolates session IDs, auth tokens, and settings per profile.
 
-**FR.12.10 — Default profile email resolution:** On first session load, the application queries `claude auth status` (no profile flag) to retrieve the default account email. If successful, the "Default" entry in the profile dropdown is updated to show the email address instead of the generic "Default" label.
+**FR.12.10 — Default profile email resolution:** On first session load, the application queries `claude auth status` (no config dir override) to retrieve the default account email. If successful, the "Default" entry in the profile dropdown is updated to show the email address instead of the generic "Default" label.
 
 ---
 
