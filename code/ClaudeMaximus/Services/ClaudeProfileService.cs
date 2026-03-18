@@ -56,14 +56,23 @@ public sealed class ClaudeProfileService : IClaudeProfileService
 
 		if (OperatingSystem.IsWindows())
 		{
-			// On Windows, 'claude' is typically a .cmd file. Launching it with
-			// UseShellExecute=true causes the .cmd wrapper to exit immediately
-			// after spawning the node process, so WaitForExitAsync returns before
-			// the user can complete browser-based auth. Using cmd.exe /c with
-			// & pause keeps the window open until auth finishes and the user
-			// presses a key.
-			var cmdArgs = $"/c \"set CLAUDE_CONFIG_DIR={configDir} && \"{claudePath}\" auth login & pause\"";
-			process = TryStartVisibleProcess("cmd.exe", cmdArgs);
+			// On Windows, 'claude' is a .cmd wrapper around node.js. Nested quoting
+			// in cmd.exe /c and .cmd wrapper interactions cause the process to exit
+			// before the OAuth browser callback arrives. Writing a temporary .bat file
+			// avoids all quoting issues and ensures cmd.exe properly waits for the
+			// entire auth flow to complete.
+			var batPath = Path.Combine(configDir, "_auth_login.bat");
+			var batContent = $"""
+				@echo off
+				set "CLAUDE_CONFIG_DIR={configDir}"
+				call "{claudePath}" auth login
+				echo.
+				echo Authentication complete. Press any key to close.
+				pause >nul
+				""";
+			await File.WriteAllTextAsync(batPath, batContent);
+
+			process = TryStartVisibleProcess(batPath, string.Empty);
 		}
 		else
 		{
@@ -80,6 +89,14 @@ public sealed class ClaudeProfileService : IClaudeProfileService
 		{
 			await process.WaitForExitAsync();
 			_log.Information("Auth login for configDir {ConfigDir} exited with code {ExitCode}", configDir, process.ExitCode);
+		}
+
+		// Clean up temp bat file
+		if (OperatingSystem.IsWindows())
+		{
+			var batPath = Path.Combine(configDir, "_auth_login.bat");
+			try { File.Delete(batPath); }
+			catch { /* best-effort cleanup */ }
 		}
 	}
 
@@ -138,8 +155,8 @@ public sealed class ClaudeProfileService : IClaudeProfileService
 		};
 
 		// Note: UseShellExecute=true does not support psi.Environment modifications.
-		// For visible processes, CLAUDE_CONFIG_DIR is set via "set" command in the
-		// cmd.exe /c wrapper on Windows, or passed directly on other platforms.
+		// For visible processes on Windows, env vars are set in the .bat file.
+		// On other platforms, the caller handles env vars differently.
 
 		try
 		{

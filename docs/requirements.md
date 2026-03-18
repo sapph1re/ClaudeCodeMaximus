@@ -395,7 +395,7 @@ The CLI accepts short aliases (`opus`, `sonnet`, `haiku`) which automatically re
 
 **FR.12.7 — Profile creation flow:** When "New..." is selected in the profile dropdown:
 1. A unique profile ID is generated (`profile_1`, `profile_2`, etc.) and a corresponding config directory created under `%APPDATA%\ClaudeMaximus\profiles\<profileId>\`
-2. A visible console window is spawned running `claude auth login` with `CLAUDE_CONFIG_DIR` set to the profile's config directory. On Windows, the command is wrapped via `cmd.exe /c "set CLAUDE_CONFIG_DIR=... && claude auth login & pause"` because the `.cmd` wrapper would otherwise exit immediately before the user completes browser-based auth. The `pause` keeps the window open until the user presses a key.
+2. A visible console window is spawned running `claude auth login` with `CLAUDE_CONFIG_DIR` set to the profile's config directory. On Windows, a temporary `.bat` file is written to the config directory that sets the env var via `set`, uses `call` to invoke the `.cmd` wrapper (ensuring cmd.exe waits for the full auth flow including the OAuth browser callback), and ends with a `pause` so the user sees the result. The `.bat` file is cleaned up after the process exits.
 3. After the console process exits, `claude auth status` is queried (with `CLAUDE_CONFIG_DIR` set) to verify authentication succeeded and retrieve the account email. If the email query fails (auth was not completed), the profile is not added and a failure message is shown.
 4. The profile is added to the persisted list with the email as display name
 5. The new profile is automatically selected
