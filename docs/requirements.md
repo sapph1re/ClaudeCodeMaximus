@@ -334,7 +334,7 @@ The application header bar provides per-session instruction toggles that modify 
 **FR.11.6 — Auto-Compact toggle:**
 - **Type:** One-shot toggle (auto-unsets after the compaction completes)
 - **Behavior:** When ON and Claude finishes responding to the user's prompt, the application automatically sends a **separate follow-up prompt** to Claude instructing it to compact the session. The follow-up prompt is:
-  `"Please compact the conversation in this session. Preserve the user's prompts (you may rephrase them for brevity and clarity, but keep the attribution that specific instructions or knowledge came from the user). Focus on preserving: decisions made during development, the reasoning behind those decisions, architecture choices, and implementation details that matter. Remove transient information such as debugging steps, intermediate failed attempts, progress updates, and unnecessary verbosity. Output the compacted conversation maintaining the USER/ASSISTANT turn structure."`
+  The compaction prompt instructs Claude to: preserve decisions and reasoning, architecture choices, user attribution, and **all URLs (full or partial)**; remove transient debugging steps, meta-instructions, and redundant corrections; restructure user inputs by semantic grouping (merge related follow-ups, only split on topic change); and output in session file format with `[timestamp] ROLE` headers.
 - **Post-compaction:** The compacted text returned by Claude replaces the session file content (rewritten, not appended). The Messages collection in the output window is also updated to reflect the compacted content.
 - **Auto-reset:** The toggle resets to OFF after the compaction prompt completes
 - **Icon:** Compress/shrink icon

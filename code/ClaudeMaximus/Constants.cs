@@ -62,6 +62,7 @@ WHAT TO PRESERVE:
 - Decisions made during development and the reasoning behind them
 - Architecture choices and implementation details that matter
 - The attribution that specific instructions or knowledge came from the user
+- ALL URLs (full or partial) — never drop URLs, they are important context for searching sessions later
 
 WHAT TO REMOVE:
 - Transient information: debugging steps, intermediate failed attempts, progress updates, unnecessary verbosity
