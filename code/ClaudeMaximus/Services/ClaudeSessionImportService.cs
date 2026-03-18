@@ -139,7 +139,7 @@ public sealed class ClaudeSessionImportService : IClaudeSessionImportService
 				if (type == "user")
 				{
 					var content = ExtractUserContent(root, Constants.ClaudeSessions.FirstPromptMaxLength);
-					if (content != null)
+					if (content != null && !IsSystemInjectedContent(content))
 					{
 						firstUserPrompt ??= content;
 						if (userPromptSamples.Count < Constants.ClaudeSessions.PromptSamplesCount)
@@ -169,6 +169,10 @@ public sealed class ClaudeSessionImportService : IClaudeSessionImportService
 	{
 		var content = ExtractUserContent(root, maxLength: 0);
 		if (string.IsNullOrWhiteSpace(content))
+			return;
+
+		// Skip system-injected content (XML tags, slash commands)
+		if (IsSystemInjectedContent(content))
 			return;
 
 		entries.Add(new SessionEntryModel
@@ -234,6 +238,29 @@ public sealed class ClaudeSessionImportService : IClaudeSessionImportService
 				Content = summary,
 			});
 		}
+	}
+
+	/// <summary>
+	/// Checks whether a user message looks like system-injected content rather than
+	/// a real human prompt. Filters out XML-tagged content (e.g., &lt;local-command-caveat&gt;,
+	/// &lt;system-reminder&gt;) and very short slash commands.
+	/// </summary>
+	private static bool IsSystemInjectedContent(string content)
+	{
+		if (string.IsNullOrWhiteSpace(content))
+			return true;
+
+		var trimmed = content.TrimStart();
+
+		// Messages starting with '<' are XML tags injected by the system
+		if (trimmed.StartsWith('<'))
+			return true;
+
+		// Very short messages (< 5 chars) that look like slash commands
+		if (trimmed.Length < 5 && trimmed.StartsWith('/'))
+			return true;
+
+		return false;
 	}
 
 	/// <summary>
