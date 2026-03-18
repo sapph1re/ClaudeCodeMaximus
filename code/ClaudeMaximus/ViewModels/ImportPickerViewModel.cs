@@ -30,12 +30,19 @@ public sealed class ImportPickerViewModel : ViewModelBase
 	private double _titleProgressValue;
 	private double _titleProgressMax = 1;
 	private CancellationTokenSource? _titleCts;
+	private ImportSessionItemViewModel? _selectedItem;
 
 	/// <summary>All discovered session items (master list).</summary>
 	private List<ImportSessionItemViewModel> _allItems = [];
 
 	/// <summary>Currently visible items (may be filtered by search).</summary>
 	public ObservableCollection<ImportSessionItemViewModel> Items { get; } = [];
+
+	/// <summary>Preview entries for the currently focused (highlighted) item.</summary>
+	public ObservableCollection<PreviewEntryViewModel> PreviewEntries { get; } = [];
+
+	/// <summary>Maximum number of user+assistant entries to show in preview.</summary>
+	private const int PreviewEntryLimit = 8;
 
 	public string SearchText
 	{
@@ -78,6 +85,22 @@ public sealed class ImportPickerViewModel : ViewModelBase
 		get => _titleProgressMax;
 		set => this.RaiseAndSetIfChanged(ref _titleProgressMax, value);
 	}
+
+	/// <summary>
+	/// The currently focused/highlighted item in the list (distinct from checkbox selection).
+	/// When set, loads a preview of the session's first exchanges.
+	/// </summary>
+	public ImportSessionItemViewModel? SelectedItem
+	{
+		get => _selectedItem;
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _selectedItem, value);
+			LoadPreview(value);
+		}
+	}
+
+	public bool HasPreview => PreviewEntries.Count > 0;
 
 	public bool HasItems => Items.Count > 0;
 
@@ -315,5 +338,45 @@ public sealed class ImportPickerViewModel : ViewModelBase
 		StatusMessage = matched.Count > 0
 			? $"Found {matched.Count} matching sessions (local search)."
 			: "No matching sessions found.";
+	}
+
+	private void LoadPreview(ImportSessionItemViewModel? item)
+	{
+		PreviewEntries.Clear();
+
+		if (item == null)
+		{
+			this.RaisePropertyChanged(nameof(HasPreview));
+			return;
+		}
+
+		try
+		{
+			var entries = _importService.ParseJsonlSession(item.Summary.JsonlPath);
+			var count = 0;
+
+			foreach (var entry in entries)
+			{
+				if (entry.Role is not (Constants.SessionFile.RoleUser or Constants.SessionFile.RoleAssistant))
+					continue;
+
+				// Truncate long content for preview
+				var content = entry.Content;
+				if (content.Length > 300)
+					content = content[..297] + "...";
+
+				PreviewEntries.Add(new PreviewEntryViewModel(entry.Role, content));
+				count++;
+
+				if (count >= PreviewEntryLimit)
+					break;
+			}
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "LoadPreview: failed to parse {Path}", item.Summary.JsonlPath);
+		}
+
+		this.RaisePropertyChanged(nameof(HasPreview));
 	}
 }

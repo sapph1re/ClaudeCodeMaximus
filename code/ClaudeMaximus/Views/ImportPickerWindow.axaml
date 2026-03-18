@@ -7,8 +7,8 @@
         x:Class="ClaudeMaximus.Views.ImportPickerWindow"
         x:DataType="vm:ImportPickerViewModel"
         Title="Import Claude Sessions"
-        Width="700" Height="550"
-        MinWidth="500" MinHeight="400"
+        Width="700" Height="650"
+        MinWidth="500" MinHeight="500"
         WindowStartupLocation="CenterOwner">
 
     <DockPanel Margin="12">
@@ -51,10 +51,16 @@
                    HorizontalAlignment="Center" VerticalAlignment="Center"
                    Opacity="0.5" FontSize="14"/>
 
-        <!-- Session list -->
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <ItemsControl ItemsSource="{Binding Items}">
-                <ItemsControl.ItemTemplate>
+        <!-- Main content: session list + preview -->
+        <Grid RowDefinitions="*,Auto">
+
+            <!-- Session list -->
+            <ListBox Grid.Row="0"
+                     ItemsSource="{Binding Items}"
+                     SelectedItem="{Binding SelectedItem}"
+                     Background="Transparent"
+                     SelectionMode="Single">
+                <ListBox.ItemTemplate>
                     <DataTemplate x:CompileBindings="False">
                         <Border Padding="8,6" Margin="0,1" CornerRadius="3"
                                 Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
@@ -93,9 +99,46 @@
                             </Grid>
                         </Border>
                     </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <!-- Preview panel -->
+            <Border Grid.Row="1"
+                    IsVisible="{Binding HasPreview}"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Margin="0,8,0,0"
+                    Padding="8"
+                    MaxHeight="200">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="Preview" FontWeight="SemiBold"
+                               FontSize="12" Opacity="0.7" Margin="0,0,0,4"/>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding PreviewEntries}" x:CompileBindings="False">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,2">
+                                        <TextBlock Text="{Binding RoleLabel}"
+                                                   FontWeight="SemiBold" FontSize="11"
+                                                   Foreground="{DynamicResource SystemAccentColor}"
+                                                   Opacity="0.8"/>
+                                        <TextBlock Text="{Binding Content}"
+                                                   TextWrapping="Wrap"
+                                                   FontSize="12"
+                                                   Opacity="0.9"
+                                                   MaxLines="4"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Margin="8,0,0,4"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+
+        </Grid>
 
     </DockPanel>
 
