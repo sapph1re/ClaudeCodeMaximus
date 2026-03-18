@@ -847,8 +847,11 @@ public sealed class SessionViewModel : ViewModelBase
 				Timestamp = DateTimeOffset.UtcNow,
 			});
 
-			var success = await _profileService.LaunchAuthLoginAsync(_appSettings.Settings.ClaudePath, profileId);
-			if (!success)
+			await _profileService.LaunchAuthLoginAsync(_appSettings.Settings.ClaudePath, profileId);
+
+			// Verify auth succeeded by querying the profile status
+			var email = await _profileService.GetAccountEmailAsync(_appSettings.Settings.ClaudePath, profileId);
+			if (string.IsNullOrEmpty(email))
 			{
 				Messages.Add(new MessageEntryViewModel
 				{
@@ -859,9 +862,7 @@ public sealed class SessionViewModel : ViewModelBase
 				return;
 			}
 
-			// Query the email for the new profile
-			var email = await _profileService.GetAccountEmailAsync(_appSettings.Settings.ClaudePath, profileId);
-			var displayName = email ?? profileId;
+			var displayName = email;
 
 			// Add profile to settings
 			_appSettings.Settings.Profiles.Add(new ClaudeProfileModel

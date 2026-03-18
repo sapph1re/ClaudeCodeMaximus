@@ -395,9 +395,9 @@ The CLI accepts short aliases (`opus`, `sonnet`, `haiku`) which automatically re
 
 **FR.12.7 — Profile creation flow:** When "New..." is selected in the profile dropdown:
 1. A unique profile ID is generated (`profile_1`, `profile_2`, etc.)
-2. A visible console window is spawned running `claude auth login --profile <id>` for interactive browser-based authentication
-3. After the console process exits, `claude auth status --profile <id>` is queried to retrieve the account email
-4. The profile is added to the persisted list with the email as display name (or the profile ID as fallback if the email cannot be retrieved)
+2. A visible console window is spawned running `claude auth login --profile <id>` for interactive browser-based authentication. On Windows, the command is wrapped via `cmd.exe /c "claude auth login --profile <id> & pause"` because the `.cmd` wrapper would otherwise exit immediately before the user completes browser-based auth. The `pause` keeps the window open until the user presses a key.
+3. After the console process exits, `claude auth status --profile <id>` is queried to verify authentication succeeded and retrieve the account email. If the email query fails (auth was not completed), the profile is not added and a failure message is shown.
+4. The profile is added to the persisted list with the email as display name
 5. The new profile is automatically selected
 
 The dropdown selection reverts to the previous value while auth is in progress, preventing the "New..." item from being persisted as the selected index.

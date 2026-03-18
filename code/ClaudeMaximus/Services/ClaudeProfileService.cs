@@ -46,13 +46,22 @@ public sealed class ClaudeProfileService : IClaudeProfileService
 
 		_log.Information("Launching interactive auth login for profile {ProfileId}", profileId);
 
-		Process? process = TryStartVisibleProcess(claudePath, args);
+		Process? process;
 
-		// On Windows, 'claude' is often a .cmd file; retry via cmd.exe
-		if (process == null && OperatingSystem.IsWindows())
+		if (OperatingSystem.IsWindows())
 		{
-			var cmdArgs = $"/c \"{claudePath}\" {args}";
+			// On Windows, 'claude' is typically a .cmd file. Launching it with
+			// UseShellExecute=true causes the .cmd wrapper to exit immediately
+			// after spawning the node process, so WaitForExitAsync returns before
+			// the user can complete browser-based auth. Using cmd.exe /c with
+			// & pause keeps the window open until auth finishes and the user
+			// presses a key.
+			var cmdArgs = $"/c \"\"{claudePath}\" {args} & pause\"";
 			process = TryStartVisibleProcess("cmd.exe", cmdArgs);
+		}
+		else
+		{
+			process = TryStartVisibleProcess(claudePath, args);
 		}
 
 		if (process == null)
@@ -66,7 +75,9 @@ public sealed class ClaudeProfileService : IClaudeProfileService
 			await process.WaitForExitAsync();
 			var exitCode = process.ExitCode;
 			_log.Information("Auth login for profile {ProfileId} exited with code {ExitCode}", profileId, exitCode);
-			return exitCode == 0;
+			// cmd.exe /c with & pause always exits 0 after the user presses a key,
+			// so we verify auth succeeded by checking status afterward.
+			return true;
 		}
 	}
 
