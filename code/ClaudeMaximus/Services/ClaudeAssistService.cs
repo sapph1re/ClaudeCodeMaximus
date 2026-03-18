@@ -26,6 +26,7 @@ public sealed class ClaudeAssistService : IClaudeAssistService
 
 	public async Task<Dictionary<string, string>> GenerateTitlesAsync(
 		List<ClaudeSessionSummaryModel> summaries,
+		Action<Dictionary<string, string>>? onBatchComplete = null,
 		CancellationToken cancellationToken = default)
 	{
 		var allTitles = new Dictionary<string, string>();
@@ -74,6 +75,7 @@ public sealed class ClaudeAssistService : IClaudeAssistService
 					{
 						foreach (var (id, title) in parsed)
 							allTitles[id] = title;
+						onBatchComplete?.Invoke(allTitles);
 						success = true;
 						break; // Success — don't try other models
 					}
@@ -180,21 +182,39 @@ public sealed class ClaudeAssistService : IClaudeAssistService
 	private static string BuildTitlePrompt(List<ClaudeSessionSummaryModel> batch)
 	{
 		var sb = new StringBuilder();
-		sb.AppendLine("Generate concise 3-6 word titles for the following Claude Code sessions.");
-		sb.AppendLine("Each session is identified by its ID and includes the first user prompt.");
+		sb.AppendLine("Generate specific, descriptive 4-8 word titles for the following Claude Code sessions.");
+		sb.AppendLine("Each title must capture WHAT was actually worked on — mention specific features, files, APIs, bugs, or technologies.");
+		sb.AppendLine("BAD titles: 'Local Command Check', 'Code Review Session', 'Debug Application Issue' (too vague).");
+		sb.AppendLine("GOOD titles: 'Fix Auth Endpoint 500 Error', 'Add Redis Cache to User API', 'Refactor Lease Rate Calculation' (specific).");
+		sb.AppendLine("Use the user prompts below to understand the actual work done.");
 		sb.AppendLine("Respond with ONLY a JSON object mapping session IDs to titles. No markdown, no explanation.");
-		sb.AppendLine("Example: {\"abc-123\": \"Fix Auth Module\", \"def-456\": \"Add Search Feature\"}");
+		sb.AppendLine("Example: {\"abc-123\": \"Fix Auth Endpoint 500 Error\", \"def-456\": \"Add Redis Cache to User API\"}");
 		sb.AppendLine();
 		sb.AppendLine("Sessions:");
 
 		foreach (var summary in batch)
 		{
-			var preview = summary.FirstUserPrompt ?? "(empty session)";
-			if (preview.Length > 200)
-				preview = preview[..200] + "...";
 			sb.AppendLine($"- ID: {summary.SessionId}");
 			sb.AppendLine($"  Messages: {summary.MessageCount}");
-			sb.AppendLine($"  First prompt: {preview}");
+
+			if (summary.UserPromptSamples.Count > 0)
+			{
+				for (var i = 0; i < summary.UserPromptSamples.Count; i++)
+				{
+					var label = i == 0 ? "First prompt" : $"Prompt {i + 1}";
+					var prompt = summary.UserPromptSamples[i];
+					sb.AppendLine($"  {label}: {prompt}");
+				}
+			}
+			else if (summary.FirstUserPrompt != null)
+			{
+				sb.AppendLine($"  First prompt: {summary.FirstUserPrompt}");
+			}
+			else
+			{
+				sb.AppendLine("  (empty session)");
+			}
+
 			sb.AppendLine();
 		}
 

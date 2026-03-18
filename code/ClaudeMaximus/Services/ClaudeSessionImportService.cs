@@ -107,6 +107,7 @@ public sealed class ClaudeSessionImportService : IClaudeSessionImportService
 		DateTimeOffset? firstTimestamp = null;
 		DateTimeOffset? lastTimestamp = null;
 		string? firstUserPrompt = null;
+		var userPromptSamples = new List<string>();
 		var messageCount = 0;
 
 		using var stream = new FileStream(jsonlPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -135,26 +136,21 @@ public sealed class ClaudeSessionImportService : IClaudeSessionImportService
 				if (type is "user" or "assistant")
 					messageCount++;
 
-				if (type == "user" && firstUserPrompt == null)
-					firstUserPrompt = ExtractUserContent(root, Constants.ClaudeSessions.FirstPromptMaxLength);
+				if (type == "user")
+				{
+					var content = ExtractUserContent(root, Constants.ClaudeSessions.FirstPromptMaxLength);
+					if (content != null)
+					{
+						firstUserPrompt ??= content;
+						if (userPromptSamples.Count < Constants.ClaudeSessions.PromptSamplesCount)
+							userPromptSamples.Add(content);
+					}
+				}
 			}
 			catch (JsonException)
 			{
 				// Skip malformed lines during discovery
 			}
-		}
-
-		if (messageCount == 0)
-		{
-			return new ClaudeSessionSummaryModel
-			{
-				SessionId = sessionId,
-				JsonlPath = jsonlPath,
-				Created = firstTimestamp ?? DateTimeOffset.MinValue,
-				LastUsed = lastTimestamp ?? DateTimeOffset.MinValue,
-				MessageCount = 0,
-				FirstUserPrompt = null,
-			};
 		}
 
 		return new ClaudeSessionSummaryModel
@@ -165,6 +161,7 @@ public sealed class ClaudeSessionImportService : IClaudeSessionImportService
 			LastUsed = lastTimestamp ?? DateTimeOffset.MinValue,
 			MessageCount = messageCount,
 			FirstUserPrompt = firstUserPrompt,
+			UserPromptSamples = userPromptSamples,
 		};
 	}
 

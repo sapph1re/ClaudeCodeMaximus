@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace ClaudeMaximus.Models;
 
@@ -11,6 +12,9 @@ public sealed class ClaudeSessionSummaryModel
 	public DateTimeOffset LastUsed { get; init; }
 	public int MessageCount { get; init; }
 	public string? FirstUserPrompt { get; init; }
+
+	/// <summary>First few user prompts for richer title generation context (up to 3, each truncated to 500 chars).</summary>
+	public IReadOnlyList<string> UserPromptSamples { get; init; } = [];
 
 	/// <summary>Claude-generated title, populated asynchronously. Null until generated.</summary>
 	public string? GeneratedTitle { get; set; }

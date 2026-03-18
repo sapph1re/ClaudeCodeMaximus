@@ -12,6 +12,7 @@ public sealed class ImportSessionItemViewModel : ViewModelBase
 {
 	private string _displayTitle;
 	private bool _isSelected;
+	private bool _isTitlePending;
 
 	public ClaudeSessionSummaryModel Summary { get; }
 
@@ -62,6 +63,13 @@ public sealed class ImportSessionItemViewModel : ViewModelBase
 		}
 	}
 
+	/// <summary>Whether a title is still being generated for this session.</summary>
+	public bool IsTitlePending
+	{
+		get => _isTitlePending;
+		set => this.RaiseAndSetIfChanged(ref _isTitlePending, value);
+	}
+
 	/// <summary>Opacity for greyed-out items.</summary>
 	public double RowOpacity => IsSelectable ? 1.0 : 0.45;
 
@@ -84,6 +92,8 @@ public sealed class ImportSessionItemViewModel : ViewModelBase
 		_displayTitle = summary.GeneratedTitle
 			?? TruncatePrompt(summary.FirstUserPrompt)
 			?? "(empty session)";
+		// Mark as pending if there's content to generate a title from and no title yet
+		_isTitlePending = summary.GeneratedTitle == null && summary.FirstUserPrompt != null;
 	}
 
 	/// <summary>
@@ -93,6 +103,7 @@ public sealed class ImportSessionItemViewModel : ViewModelBase
 	{
 		Summary.GeneratedTitle = title;
 		DisplayTitle = title;
+		IsTitlePending = false;
 	}
 
 	private static string TruncatePrompt(string? prompt)

@@ -24,11 +24,16 @@
         </DockPanel>
 
         <!-- Status bar -->
-        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
-            <TextBlock Text="{Binding StatusMessage}" Opacity="0.7" FontSize="12"/>
-            <ProgressBar DockPanel.Dock="Right" Width="16" Height="16" IsIndeterminate="True"
-                         IsVisible="{Binding IsGeneratingTitles}" Margin="8,0,0,0"
-                         ToolTip.Tip="Generating session titles..."/>
+        <TextBlock DockPanel.Dock="Top" Text="{Binding StatusMessage}" Opacity="0.7" FontSize="12"
+                   Margin="0,0,0,2"/>
+
+        <!-- Title generation progress -->
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4"
+                   IsVisible="{Binding IsGeneratingTitles}">
+            <TextBlock DockPanel.Dock="Left" Text="{Binding TitleProgressText}"
+                       FontSize="11" Opacity="0.6" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <ProgressBar Minimum="0" Maximum="{Binding TitleProgressMax}" Value="{Binding TitleProgressValue}"
+                         Height="4" VerticalAlignment="Center"/>
         </DockPanel>
 
         <!-- Bottom: Action buttons -->
@@ -62,10 +67,15 @@
                                           VerticalAlignment="Center" Margin="0,0,8,0"/>
 
                                 <!-- Title / preview -->
-                                <TextBlock Grid.Row="0" Grid.Column="1"
-                                           Text="{Binding DisplayTitle}"
-                                           TextTrimming="CharacterEllipsis"
-                                           FontWeight="SemiBold"/>
+                                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="{Binding DisplayTitle}"
+                                               TextTrimming="CharacterEllipsis"
+                                               FontWeight="SemiBold"/>
+                                    <TextBlock Text="generating..."
+                                               IsVisible="{Binding IsTitlePending}"
+                                               FontSize="11" FontStyle="Italic" Opacity="0.4"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
 
                                 <!-- Status badge (already imported / empty) -->
                                 <TextBlock Grid.Row="0" Grid.Column="2"

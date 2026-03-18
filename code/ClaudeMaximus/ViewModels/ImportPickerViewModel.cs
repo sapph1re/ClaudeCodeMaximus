@@ -26,6 +26,9 @@ public sealed class ImportPickerViewModel : ViewModelBase
 	private bool _isSearching;
 	private bool _isGeneratingTitles;
 	private string _statusMessage = string.Empty;
+	private string _titleProgressText = string.Empty;
+	private double _titleProgressValue;
+	private double _titleProgressMax = 1;
 	private CancellationTokenSource? _titleCts;
 
 	/// <summary>All discovered session items (master list).</summary>
@@ -56,6 +59,24 @@ public sealed class ImportPickerViewModel : ViewModelBase
 	{
 		get => _statusMessage;
 		set => this.RaiseAndSetIfChanged(ref _statusMessage, value);
+	}
+
+	public string TitleProgressText
+	{
+		get => _titleProgressText;
+		set => this.RaiseAndSetIfChanged(ref _titleProgressText, value);
+	}
+
+	public double TitleProgressValue
+	{
+		get => _titleProgressValue;
+		set => this.RaiseAndSetIfChanged(ref _titleProgressValue, value);
+	}
+
+	public double TitleProgressMax
+	{
+		get => _titleProgressMax;
+		set => this.RaiseAndSetIfChanged(ref _titleProgressMax, value);
 	}
 
 	public bool HasItems => Items.Count > 0;
@@ -170,28 +191,31 @@ public sealed class ImportPickerViewModel : ViewModelBase
 		_titleCts = new CancellationTokenSource();
 		var ct = _titleCts.Token;
 
-		var summaries = _allItems
+		var pendingItems = _allItems
 			.Where(i => i.Summary.FirstUserPrompt != null)
-			.Select(i => i.Summary)
 			.ToList();
+		var summaries = pendingItems.Select(i => i.Summary).ToList();
 
 		if (summaries.Count == 0)
 			return;
 
 		IsGeneratingTitles = true;
+		TitleProgressMax = summaries.Count;
+		TitleProgressValue = 0;
+		TitleProgressText = $"Generating titles... 0/{summaries.Count}";
 
 		try
 		{
-			var titles = await _assistService.GenerateTitlesAsync(summaries, ct);
+			await _assistService.GenerateTitlesAsync(summaries, OnBatchComplete, ct);
 
 			if (ct.IsCancellationRequested)
 				return;
 
-			// Apply titles progressively
-			foreach (var (sessionId, title) in titles)
+			// Mark any remaining items as no longer pending (title generation finished or failed)
+			foreach (var item in pendingItems)
 			{
-				var item = _allItems.FirstOrDefault(i => i.SessionId == sessionId);
-				item?.UpdateTitle(title);
+				if (item.IsTitlePending)
+					item.IsTitlePending = false;
 			}
 		}
 		catch (OperationCanceledException)
@@ -205,7 +229,25 @@ public sealed class ImportPickerViewModel : ViewModelBase
 		finally
 		{
 			IsGeneratingTitles = false;
+			TitleProgressText = string.Empty;
 		}
+	}
+
+	private void OnBatchComplete(Dictionary<string, string> allTitlesSoFar)
+	{
+		Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+		{
+			foreach (var (sessionId, title) in allTitlesSoFar)
+			{
+				var item = _allItems.FirstOrDefault(i => i.SessionId == sessionId);
+				if (item != null && item.IsTitlePending)
+					item.UpdateTitle(title);
+			}
+
+			TitleProgressValue = allTitlesSoFar.Count;
+			var total = (int)TitleProgressMax;
+			TitleProgressText = $"Generating titles... {allTitlesSoFar.Count}/{total}";
+		});
 	}
 
 	private void ReorderByIds(List<string> orderedIds)

@@ -100,6 +100,7 @@ Use the original timestamps from the conversation. Each entry starts with a [tim
 		public const string SessionFileExtension = ".jsonl";
 		public const int StatusCheckIntervalSeconds = 60;
 		public const int FirstPromptMaxLength = 500;
+		public const int PromptSamplesCount = 3;
 
 		/// <summary>
 		/// Derives the project slug that Claude Code uses for its session storage path.

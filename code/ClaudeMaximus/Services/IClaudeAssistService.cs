@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,9 +17,11 @@ public interface IClaudeAssistService
 	/// Generates concise titles for a batch of session summaries using the Claude CLI.
 	/// Returns a mapping of session ID to generated title.
 	/// Returns an empty dictionary if the CLI is unavailable or fails.
+	/// <paramref name="onBatchComplete"/> is called after each batch with the titles generated so far.
 	/// </summary>
 	Task<Dictionary<string, string>> GenerateTitlesAsync(
 		List<ClaudeSessionSummaryModel> summaries,
+		Action<Dictionary<string, string>>? onBatchComplete = null,
 		CancellationToken cancellationToken = default);
 
 	/// <summary>
