@@ -51,6 +51,13 @@ public sealed class SessionFileService : ISessionFileService
 	public bool SessionFileExists(string fileName)
 		=> File.Exists(GetFullPath(fileName));
 
+	public void DeleteSessionFile(string fileName)
+	{
+		var fullPath = GetFullPath(fileName);
+		if (File.Exists(fullPath))
+			File.Delete(fullPath);
+	}
+
 	public void RewriteSessionFile(string fileName, string content)
 	{
 		var fullPath = GetFullPath(fileName);

@@ -713,38 +713,57 @@ public partial class SessionTreeView : UserControl
 		return false;
 	}
 
-	private void DeleteSessionFromTree(SessionTreeViewModel vm, SessionNodeViewModel session)
+	private async void DeleteSessionFromTree(SessionTreeViewModel vm, SessionNodeViewModel session)
 	{
+		var fileService = App.Services.GetRequiredService<ISessionFileService>();
+		var fileExists = fileService.SessionFileExists(session.FileName);
+
+		if (fileExists)
+		{
+			// Session file exists — confirm deletion with user
+			var ownerWindow = TopLevel.GetTopLevel(this) as MainWindow;
+			if (ownerWindow == null)
+				return;
+
+			var confirmed = await ownerWindow.ShowConfirmOverlayAsync(
+				$"Delete session \"{session.Name}\"?\n\nThis removes the session from Maximus and deletes its local file. The original Claude Code session is not affected.",
+				"Delete");
+
+			if (!confirmed)
+				return;
+		}
+
+		// Try with forceDelete when file exists
 		foreach (var dir in vm.Directories)
 		{
-			if (TryDeleteSessionFromParent(vm, dir, session))
+			if (TryDeleteSessionFromParent(vm, dir, session, fileExists))
 				return;
 		}
 	}
 
 	private static bool TryDeleteSessionFromParent(
-		SessionTreeViewModel vm, DirectoryNodeViewModel dir, SessionNodeViewModel target)
+		SessionTreeViewModel vm, DirectoryNodeViewModel dir, SessionNodeViewModel target, bool forceDelete = false)
 	{
 		foreach (var child in dir.Children)
 		{
 			if (child == target)
-				return vm.TryDeleteSession(dir, target);
+				return vm.TryDeleteSession(dir, target, forceDelete);
 
-			if (child is GroupNodeViewModel grp && TryDeleteSessionFromGroup(vm, grp, target))
+			if (child is GroupNodeViewModel grp && TryDeleteSessionFromGroup(vm, grp, target, forceDelete))
 				return true;
 		}
 		return false;
 	}
 
 	private static bool TryDeleteSessionFromGroup(
-		SessionTreeViewModel vm, GroupNodeViewModel parent, SessionNodeViewModel target)
+		SessionTreeViewModel vm, GroupNodeViewModel parent, SessionNodeViewModel target, bool forceDelete = false)
 	{
 		foreach (var child in parent.Children)
 		{
 			if (child == target)
-				return vm.TryDeleteSessionFromGroup(parent, target);
+				return vm.TryDeleteSessionFromGroup(parent, target, forceDelete);
 
-			if (child is GroupNodeViewModel grp && TryDeleteSessionFromGroup(vm, grp, target))
+			if (child is GroupNodeViewModel grp && TryDeleteSessionFromGroup(vm, grp, target, forceDelete))
 				return true;
 		}
 		return false;

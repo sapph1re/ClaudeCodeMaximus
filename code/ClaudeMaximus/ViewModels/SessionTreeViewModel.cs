@@ -383,10 +383,13 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		return true;
 	}
 
-	public bool TryDeleteSession(DirectoryNodeViewModel parent, SessionNodeViewModel session)
+	public bool TryDeleteSession(DirectoryNodeViewModel parent, SessionNodeViewModel session, bool forceDelete = false)
 	{
-		if (_sessionFileService.SessionFileExists(session.FileName))
+		if (!forceDelete && _sessionFileService.SessionFileExists(session.FileName))
 			return false;
+
+		if (forceDelete)
+			_sessionFileService.DeleteSessionFile(session.FileName);
 
 		parent.Children.Remove(session);
 		parent.Model.Sessions.Remove(session.Model);
@@ -394,10 +397,13 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		return true;
 	}
 
-	public bool TryDeleteSessionFromGroup(GroupNodeViewModel parent, SessionNodeViewModel session)
+	public bool TryDeleteSessionFromGroup(GroupNodeViewModel parent, SessionNodeViewModel session, bool forceDelete = false)
 	{
-		if (_sessionFileService.SessionFileExists(session.FileName))
+		if (!forceDelete && _sessionFileService.SessionFileExists(session.FileName))
 			return false;
+
+		if (forceDelete)
+			_sessionFileService.DeleteSessionFile(session.FileName);
 
 		parent.Children.Remove(session);
 		parent.Model.Sessions.Remove(session.Model);
