@@ -216,6 +216,13 @@ public partial class MainWindow : Window
 			return;
 		}
 
+		if (keyService.Matches(Constants.KeyBindings.AddDirectory, e))
+		{
+			e.Handled = true;
+			_ = HandleAddDirectoryHotkey();
+			return;
+		}
+
 		if (keyService.Matches(Constants.KeyBindings.OpenSettings, e))
 		{
 			e.Handled = true;
@@ -223,6 +230,24 @@ public partial class MainWindow : Window
 				vm.OpenSettingsCommand.Execute().Subscribe();
 			return;
 		}
+	}
+
+	private async Task HandleAddDirectoryHotkey()
+	{
+		if (DataContext is not MainWindowViewModel vm)
+			return;
+
+		var folders = await StorageProvider.OpenFolderPickerAsync(
+			new Avalonia.Platform.Storage.FolderPickerOpenOptions
+			{
+				Title = "Select Working Directory",
+				AllowMultiple = false,
+			});
+
+		if (folders.Count == 0)
+			return;
+
+		vm.SessionTree.AddDirectory(folders[0].Path.LocalPath);
 	}
 
 	private async Task HandleImportSessionsHotkey()
@@ -248,22 +273,14 @@ public partial class MainWindow : Window
 
 		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
 		var assistService = App.Services.GetRequiredService<IClaudeAssistService>();
-		var labelService = App.Services.GetRequiredService<IDirectoryLabelService>();
 
-		// Build directory list for the picker
-		var dirEntries = vm.SessionTree.Directories.Select(d =>
-			new ImportPickerViewModel.DirectoryEntry
-			{
-				Path = d.Path,
-				DisplayName = d.Label,
-			}).ToList();
-
-		// Pre-select from active session if available
+		var sourceDirectories = vm.SessionTree.BuildSourceDirectories();
+		var importTargets = vm.SessionTree.BuildImportTargets();
 		string? initialPath = vm.SessionTree.SelectedSession?.Model.WorkingDirectory;
 
 		var pickerVm = new ImportPickerViewModel(importService, assistService);
 		var alreadyImportedIds = vm.SessionTree.CollectAllClaudeSessionIds();
-		pickerVm.Initialize(dirEntries, initialPath, alreadyImportedIds);
+		pickerVm.Initialize(sourceDirectories, importTargets, initialPath, null, alreadyImportedIds);
 
 		var picker = new ImportPickerWindow { DataContext = pickerVm };
 		await picker.ShowDialog(this);
@@ -271,33 +288,15 @@ public partial class MainWindow : Window
 		if (picker.Result == null || picker.Result.Count == 0)
 			return;
 
-		// Determine which directory to import into based on the picker's selected directory
-		var selectedPath = pickerVm.SelectedDirectory?.Path;
-		var dirNode = selectedPath != null
-			? FindDirectoryForPath(vm.SessionTree, selectedPath)
-			: null;
-
-		if (dirNode == null)
+		var target = pickerVm.SelectedImportTarget;
+		if (target == null)
 			return;
 
+		var (dirNode, grpNode) = vm.SessionTree.FindTargetByKey(target.Key);
 		var fileService = App.Services.GetRequiredService<ISessionFileService>();
 
 		foreach (var item in picker.Result)
-			SessionTreeView.ExecuteImport(vm.SessionTree, fileService, importService, item, dirNode, null);
-	}
-
-	private static DirectoryNodeViewModel? FindDirectoryForPath(SessionTreeViewModel tree, string? workingDirectory)
-	{
-		if (workingDirectory == null)
-			return null;
-
-		foreach (var dir in tree.Directories)
-		{
-			if (string.Equals(dir.Path, workingDirectory, StringComparison.OrdinalIgnoreCase))
-				return dir;
-		}
-
-		return null;
+			SessionTreeView.ExecuteImport(vm.SessionTree, fileService, importService, item, dirNode, grpNode);
 	}
 
 	// ── Overlay: confirm dialog ───────────────────────────────────────────────

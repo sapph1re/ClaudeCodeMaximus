@@ -754,40 +754,46 @@ public partial class SessionTreeView : UserControl
 	private static async Task ImportToDirectoryAsync(
 		SessionTreeViewModel vm, DirectoryNodeViewModel dir, Window? ownerWindow)
 	{
-		var selected = await ShowImportPickerAsync(dir.Path, vm, ownerWindow);
-		if (selected == null || selected.Count == 0)
+		var result = await ShowImportPickerAsync(dir.Path, dir.Path, vm, ownerWindow);
+		if (result == null)
 			return;
 
 		var fileService = App.Services.GetRequiredService<ISessionFileService>();
 		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
+		var (dirTarget, grpTarget) = vm.FindTargetByKey(result.Value.TargetKey);
 
-		foreach (var item in selected)
-			ExecuteImport(vm, fileService, importService, item, dir, null);
+		foreach (var item in result.Value.Items)
+			ExecuteImport(vm, fileService, importService, item, dirTarget, grpTarget);
 	}
 
 	private static async Task ImportToGroupAsync(
 		SessionTreeViewModel vm, GroupNodeViewModel grp, Window? ownerWindow)
 	{
-		var selected = await ShowImportPickerAsync(grp.WorkingDirectory, vm, ownerWindow);
-		if (selected == null || selected.Count == 0)
+		var targetKey = $"{grp.WorkingDirectory}|{grp.Name}";
+		var result = await ShowImportPickerAsync(grp.WorkingDirectory, targetKey, vm, ownerWindow);
+		if (result == null)
 			return;
 
 		var fileService = App.Services.GetRequiredService<ISessionFileService>();
 		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
+		var (dirTarget, grpTarget) = vm.FindTargetByKey(result.Value.TargetKey);
 
-		foreach (var item in selected)
-			ExecuteImport(vm, fileService, importService, item, null, grp);
+		foreach (var item in result.Value.Items)
+			ExecuteImport(vm, fileService, importService, item, dirTarget, grpTarget);
 	}
 
-	private static async Task<IReadOnlyList<ImportSessionItemViewModel>?> ShowImportPickerAsync(
-		string workingDirectory, SessionTreeViewModel vm, Window? ownerWindow)
+	private static async Task<(IReadOnlyList<ImportSessionItemViewModel> Items, string TargetKey)?> ShowImportPickerAsync(
+		string workingDirectory, string initialTargetKey, SessionTreeViewModel vm, Window? ownerWindow)
 	{
 		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
 		var assistService = App.Services.GetRequiredService<IClaudeAssistService>();
 
-		var pickerVm = new ImportPickerViewModel(importService, assistService);
+		var sourceDirectories = vm.BuildSourceDirectories();
+		var importTargets = vm.BuildImportTargets();
 		var alreadyImportedIds = vm.CollectAllClaudeSessionIds();
-		pickerVm.DiscoverSessions(workingDirectory, alreadyImportedIds);
+
+		var pickerVm = new ImportPickerViewModel(importService, assistService);
+		pickerVm.Initialize(sourceDirectories, importTargets, workingDirectory, initialTargetKey, alreadyImportedIds);
 
 		var picker = new ImportPickerWindow { DataContext = pickerVm };
 
@@ -796,7 +802,10 @@ public partial class SessionTreeView : UserControl
 		else
 			picker.Show();
 
-		return picker.Result;
+		if (picker.Result == null || picker.Result.Count == 0 || pickerVm.SelectedImportTarget == null)
+			return null;
+
+		return (picker.Result, pickerVm.SelectedImportTarget.Key);
 	}
 
 	internal static void ExecuteImport(

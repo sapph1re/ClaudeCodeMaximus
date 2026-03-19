@@ -221,6 +221,97 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		}
 	}
 
+	/// <summary>
+	/// Builds a flat list of all import targets (directories + groups) with hierarchy depth.
+	/// </summary>
+	public IReadOnlyList<ImportTargetModel> BuildImportTargets()
+	{
+		var targets = new List<ImportTargetModel>();
+		foreach (var dir in Directories)
+		{
+			targets.Add(new ImportTargetModel
+			{
+				DisplayName = dir.Label,
+				WorkingDirectory = dir.Path,
+				Depth = 0,
+				IsDirectory = true,
+				Key = dir.Path,
+			});
+			AddGroupTargets(dir.Children, dir.Path, 1, targets);
+		}
+		return targets;
+	}
+
+	/// <summary>
+	/// Builds a list of source directories only (for session discovery).
+	/// </summary>
+	public IReadOnlyList<ImportTargetModel> BuildSourceDirectories()
+	{
+		return Directories.Select(d => new ImportTargetModel
+		{
+			DisplayName = d.Label,
+			WorkingDirectory = d.Path,
+			Depth = 0,
+			IsDirectory = true,
+			Key = d.Path,
+		}).ToList();
+	}
+
+	/// <summary>
+	/// Finds the directory or group node matching an ImportTargetModel key.
+	/// Returns (dirNode, grpNode) — one will be non-null.
+	/// </summary>
+	public (DirectoryNodeViewModel? Dir, GroupNodeViewModel? Grp) FindTargetByKey(string key)
+	{
+		foreach (var dir in Directories)
+		{
+			if (string.Equals(dir.Path, key, StringComparison.OrdinalIgnoreCase))
+				return (dir, null);
+
+			var grp = FindGroupByKey(dir.Children, key);
+			if (grp != null)
+				return (null, grp);
+		}
+		return (null, null);
+	}
+
+	private static void AddGroupTargets(
+		ObservableCollection<ViewModelBase> children, string workingDir, int depth, List<ImportTargetModel> targets)
+	{
+		foreach (var child in children)
+		{
+			if (child is not GroupNodeViewModel grp)
+				continue;
+
+			targets.Add(new ImportTargetModel
+			{
+				DisplayName = grp.Name,
+				WorkingDirectory = workingDir,
+				Depth = depth,
+				IsDirectory = false,
+				Key = $"{workingDir}|{grp.Name}",
+			});
+			AddGroupTargets(grp.Children, workingDir, depth + 1, targets);
+		}
+	}
+
+	private static GroupNodeViewModel? FindGroupByKey(ObservableCollection<ViewModelBase> children, string key)
+	{
+		foreach (var child in children)
+		{
+			if (child is not GroupNodeViewModel grp)
+				continue;
+
+			if (key == $"{grp.WorkingDirectory}|{grp.Name}")
+				return grp;
+
+			var nested = FindGroupByKey(grp.Children, key);
+			if (nested != null)
+				return nested;
+		}
+		return null;
+	}
+
 	// --- Rename operations ---
 
 	public void RenameGroup(GroupNodeViewModel group, string newName)

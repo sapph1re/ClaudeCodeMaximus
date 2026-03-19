@@ -31,7 +31,8 @@ public sealed class ImportPickerViewModel : ViewModelBase
 	private double _titleProgressMax = 1;
 	private CancellationTokenSource? _titleCts;
 	private ImportSessionItemViewModel? _selectedItem;
-	private DirectoryEntry? _selectedDirectory;
+	private ImportTargetModel? _selectedSource;
+	private ImportTargetModel? _selectedImportTarget;
 	private IReadOnlySet<string> _alreadyImportedIds = new HashSet<string>();
 
 	/// <summary>All discovered session items (master list).</summary>
@@ -43,19 +44,14 @@ public sealed class ImportPickerViewModel : ViewModelBase
 	/// <summary>Preview entries for the currently focused (highlighted) item.</summary>
 	public ObservableCollection<PreviewEntryViewModel> PreviewEntries { get; } = [];
 
-	/// <summary>Available directories for the directory selector.</summary>
-	public ObservableCollection<DirectoryEntry> Directories { get; } = [];
+	/// <summary>Source directories for session discovery (only directories, not groups).</summary>
+	public ObservableCollection<ImportTargetModel> SourceDirectories { get; } = [];
+
+	/// <summary>All possible import targets (directories + groups, with hierarchy).</summary>
+	public ObservableCollection<ImportTargetModel> ImportTargets { get; } = [];
 
 	/// <summary>Maximum number of user+assistant entries to show in preview.</summary>
 	private const int PreviewEntryLimit = 8;
-
-	/// <summary>Lightweight entry for the directory selector combo box.</summary>
-	public sealed class DirectoryEntry
-	{
-		public required string Path { get; init; }
-		public required string DisplayName { get; init; }
-		public override string ToString() => DisplayName;
-	}
 
 	public string SearchText
 	{
@@ -113,17 +109,25 @@ public sealed class ImportPickerViewModel : ViewModelBase
 		}
 	}
 
-	public DirectoryEntry? SelectedDirectory
+	/// <summary>Source directory for session discovery. Changing this re-discovers sessions.</summary>
+	public ImportTargetModel? SelectedSource
 	{
-		get => _selectedDirectory;
+		get => _selectedSource;
 		set
 		{
-			if (this.RaiseAndSetIfChanged(ref _selectedDirectory, value) != null && value != null)
-				RediscoverForDirectory(value.Path);
+			if (this.RaiseAndSetIfChanged(ref _selectedSource, value) != null && value != null)
+				RediscoverForDirectory(value.WorkingDirectory);
 		}
 	}
 
-	public bool HasDirectories => Directories.Count > 1;
+	/// <summary>Target location in the tree where imported sessions will be added.</summary>
+	public ImportTargetModel? SelectedImportTarget
+	{
+		get => _selectedImportTarget;
+		set => this.RaiseAndSetIfChanged(ref _selectedImportTarget, value);
+	}
+
+	public bool HasMultipleSources => SourceDirectories.Count > 1;
 
 	public bool HasPreview => PreviewEntries.Count > 0;
 
@@ -146,28 +150,42 @@ public sealed class ImportPickerViewModel : ViewModelBase
 	}
 
 	/// <summary>
-	/// Sets up the directory list and discovers sessions for the initial working directory.
+	/// Sets up source directories, import targets, and discovers sessions.
 	/// </summary>
 	public void Initialize(
-		IReadOnlyList<DirectoryEntry> directories,
+		IReadOnlyList<ImportTargetModel> sourceDirectories,
+		IReadOnlyList<ImportTargetModel> importTargets,
 		string? initialWorkingDirectory,
+		string? initialTargetKey,
 		IReadOnlySet<string> alreadyImportedIds)
 	{
 		_alreadyImportedIds = alreadyImportedIds;
 
-		Directories.Clear();
-		foreach (var dir in directories)
-			Directories.Add(dir);
-		this.RaisePropertyChanged(nameof(HasDirectories));
+		SourceDirectories.Clear();
+		foreach (var src in sourceDirectories)
+			SourceDirectories.Add(src);
+		this.RaisePropertyChanged(nameof(HasMultipleSources));
 
-		// Select the initial directory (without triggering rediscovery since we call it explicitly)
-		_selectedDirectory = directories.FirstOrDefault(d =>
-			string.Equals(d.Path, initialWorkingDirectory, StringComparison.OrdinalIgnoreCase))
-			?? directories.FirstOrDefault();
-		this.RaisePropertyChanged(nameof(SelectedDirectory));
+		ImportTargets.Clear();
+		foreach (var tgt in importTargets)
+			ImportTargets.Add(tgt);
 
-		if (_selectedDirectory != null)
-			PopulateFromDirectory(_selectedDirectory.Path);
+		// Select initial source (without triggering rediscovery)
+		_selectedSource = sourceDirectories.FirstOrDefault(d =>
+			string.Equals(d.WorkingDirectory, initialWorkingDirectory, StringComparison.OrdinalIgnoreCase))
+			?? sourceDirectories.FirstOrDefault();
+		this.RaisePropertyChanged(nameof(SelectedSource));
+
+		// Select initial import target
+		_selectedImportTarget = initialTargetKey != null
+			? importTargets.FirstOrDefault(t => t.Key == initialTargetKey)
+			: importTargets.FirstOrDefault(t =>
+				string.Equals(t.WorkingDirectory, initialWorkingDirectory, StringComparison.OrdinalIgnoreCase));
+		_selectedImportTarget ??= importTargets.FirstOrDefault();
+		this.RaisePropertyChanged(nameof(SelectedImportTarget));
+
+		if (_selectedSource != null)
+			PopulateFromDirectory(_selectedSource.WorkingDirectory);
 	}
 
 	/// <summary>

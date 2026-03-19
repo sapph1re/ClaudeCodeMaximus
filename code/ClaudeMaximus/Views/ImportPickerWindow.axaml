@@ -13,12 +13,22 @@
 
     <DockPanel Margin="12">
 
-        <!-- Directory selector -->
-        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8"
-                   IsVisible="{Binding HasDirectories}" x:CompileBindings="False">
-            <TextBlock DockPanel.Dock="Left" Text="Directory:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-            <ComboBox ItemsSource="{Binding Directories}"
-                      SelectedItem="{Binding SelectedDirectory}"
+        <!-- Source directory selector (only shown when multiple directories exist) -->
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4"
+                   IsVisible="{Binding HasMultipleSources}" x:CompileBindings="False">
+            <TextBlock DockPanel.Dock="Left" Text="Scan from:" VerticalAlignment="Center"
+                       Margin="0,0,8,0" Width="75"/>
+            <ComboBox ItemsSource="{Binding SourceDirectories}"
+                      SelectedItem="{Binding SelectedSource}"
+                      HorizontalAlignment="Stretch"/>
+        </DockPanel>
+
+        <!-- Import target selector (always shown) -->
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8" x:CompileBindings="False">
+            <TextBlock DockPanel.Dock="Left" Text="Import into:" VerticalAlignment="Center"
+                       Margin="0,0,8,0" Width="75"/>
+            <ComboBox ItemsSource="{Binding ImportTargets}"
+                      SelectedItem="{Binding SelectedImportTarget}"
                       HorizontalAlignment="Stretch"/>
         </DockPanel>
 
