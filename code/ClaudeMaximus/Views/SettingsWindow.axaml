@@ -8,7 +8,7 @@
         x:Class="ClaudeMaximus.Views.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
         Title="Settings"
-        Width="520" Height="700"
+        Width="560" Height="700"
         CanResize="False"
         WindowStartupLocation="CenterOwner">
 
@@ -23,7 +23,11 @@
                 Command="{Binding SaveCommand}"
                 Click="OnSaveClicked"/>
 
-        <TabControl FontSize="13">
+        <TabControl>
+            <TabControl.Resources>
+                <x:Double x:Key="TabItemHeaderFontSize">14</x:Double>
+                <Thickness x:Key="TabItemHeaderMargin">8,2,8,2</Thickness>
+            </TabControl.Resources>
 
             <!-- General tab -->
             <TabItem Header="General">
