@@ -355,7 +355,10 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			_node.HasDraftText = !string.IsNullOrWhiteSpace(draft);
 		}
 
-		_lastKnownEntryCount = Messages.Count;
+		// Initialize JSONL entry count for the watcher. Must reflect the JSONL's current
+		// state, not the .txt file's, because the JSONL typically has more entries (tool_use, etc.)
+		// and RefreshFromJsonl compares against this to find only truly new entries.
+		_lastKnownEntryCount = InitializeJsonlEntryCount();
 		StartFileWatcher();
 	}
 
@@ -365,6 +368,50 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_jsonlWatcher?.Dispose();
 		_fileChangeDebounceTimer?.Dispose();
 		_jsonlChangeDebounceTimer?.Dispose();
+	}
+
+	/// <summary>
+	/// Counts the current displayable entries in the JSONL file so the watcher
+	/// can detect only truly new entries. Falls back to Messages.Count if no JSONL exists.
+	/// </summary>
+	private int InitializeJsonlEntryCount()
+	{
+		var sessionId = _node.Model.ClaudeSessionId;
+		if (string.IsNullOrEmpty(sessionId) || string.IsNullOrEmpty(WorkingDirectory))
+			return Messages.Count;
+
+		try
+		{
+			var slug = Constants.ClaudeSessions.BuildProjectSlug(WorkingDirectory);
+			var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+			var jsonlPath = Path.Combine(
+				userProfile,
+				Constants.ClaudeSessions.ClaudeHomeFolderName,
+				Constants.ClaudeSessions.ProjectsFolderName,
+				slug,
+				sessionId + Constants.ClaudeSessions.SessionFileExtension);
+
+			if (!File.Exists(jsonlPath))
+				return Messages.Count;
+
+			var entries = _importService.ParseJsonlSession(jsonlPath);
+			var count = 0;
+			foreach (var entry in entries)
+			{
+				if (entry.Role != Constants.SessionFile.RoleCompaction
+				    && !string.IsNullOrWhiteSpace(entry.Content))
+					count++;
+			}
+
+			_log.Debug("InitializeJsonlEntryCount: {Count} displayable entries in JSONL for session {SessionId}",
+				count, sessionId);
+			return count;
+		}
+		catch (Exception ex)
+		{
+			_log.Debug("InitializeJsonlEntryCount: error reading JSONL: {Error}", ex.Message);
+			return Messages.Count;
+		}
 	}
 
 	private void StartFileWatcher()
