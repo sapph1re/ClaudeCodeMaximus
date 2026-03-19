@@ -122,6 +122,7 @@ public sealed class ClaudeSessionImportService : IClaudeSessionImportService
 	{
 		DateTimeOffset? firstTimestamp = null;
 		DateTimeOffset? lastTimestamp = null;
+		DateTimeOffset? lastMessageTimestamp = null;
 		string? firstUserPrompt = null;
 		var userPromptSamples = new List<string>();
 		var messageCount = 0;
@@ -150,7 +151,10 @@ public sealed class ClaudeSessionImportService : IClaudeSessionImportService
 				lastTimestamp = timestamp;
 
 				if (type is "user" or "assistant")
+				{
 					messageCount++;
+					lastMessageTimestamp = timestamp;
+				}
 
 				if (type == "user")
 				{
@@ -174,7 +178,7 @@ public sealed class ClaudeSessionImportService : IClaudeSessionImportService
 			SessionId = sessionId,
 			JsonlPath = jsonlPath,
 			Created = firstTimestamp ?? DateTimeOffset.MinValue,
-			LastUsed = lastTimestamp ?? DateTimeOffset.MinValue,
+			LastUsed = lastMessageTimestamp ?? lastTimestamp ?? DateTimeOffset.MinValue,
 			MessageCount = messageCount,
 			FirstUserPrompt = firstUserPrompt,
 			UserPromptSamples = userPromptSamples,
