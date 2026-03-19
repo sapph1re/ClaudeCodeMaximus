@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reactive;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using Avalonia.Threading;
 using ClaudeMaximus.Models;
 using ClaudeMaximus.Services;
@@ -25,6 +26,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private readonly IAppSettingsService _appSettings;
 	private readonly IDraftService _draftService;
 	private readonly ICodeIndexService _codeIndexService;
+	private readonly IClaudeProfileService _profileService;
 	private string _name;
 	private string _inputText = string.Empty;
 	private bool _isBusy;
@@ -43,6 +45,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private int _selectedModelIndex;
 	private FileSystemWatcher? _fileWatcher;
 	private Timer? _fileChangeDebounceTimer;
+	private int _selectedProfileIndex;
+	private bool _isProfileAuthInProgress;
 
 	public string Name
 	{
@@ -232,6 +236,45 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			? ModelIds[_selectedModelIndex]
 			: null;
 
+	/// <summary>Display names for the profile selector. Rebuilt when profiles change.</summary>
+	public ObservableCollection<string> AvailableProfiles { get; } = [];
+
+	/// <summary>Selected profile index. 0=Default, 1..N=stored profiles, last="New...".</summary>
+	public int SelectedProfileIndex
+	{
+		get => _selectedProfileIndex;
+		set
+		{
+			// "New..." is always the last item
+			if (value == AvailableProfiles.Count - 1)
+			{
+				_ = HandleNewProfileAsync();
+				// Revert selection to previous value (don't persist "New...")
+				this.RaisePropertyChanged();
+				return;
+			}
+
+			this.RaiseAndSetIfChanged(ref _selectedProfileIndex, value);
+			_appSettings.Settings.SelectedProfileIndex = value;
+			_appSettings.Save();
+		}
+	}
+
+	/// <summary>Returns the CLAUDE_CONFIG_DIR path for the selected profile, or null if Default is selected.</summary>
+	public string? SelectedProfileConfigDir
+	{
+		get
+		{
+			if (_selectedProfileIndex <= 0)
+				return null;
+			var profiles = _appSettings.Settings.Profiles;
+			var profileListIndex = _selectedProfileIndex - 1;
+			if (profileListIndex < 0 || profileListIndex >= profiles.Count)
+				return null;
+			return System.IO.Path.Combine(_profileService.ProfilesRootDirectory, profiles[profileListIndex].ProfileId);
+		}
+	}
+
 	/// <summary>Persisted vertical scroll offset for the message area.</summary>
 	public double ScrollOffset
 	{
@@ -254,7 +297,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		IClaudeProcessManager processManager,
 		IAppSettingsService appSettings,
 		IDraftService draftService,
-		ICodeIndexService codeIndexService)
+		ICodeIndexService codeIndexService,
+		IClaudeProfileService profileService)
 	{
 		_node             = node;
 		_fileService      = fileService;
@@ -262,10 +306,14 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_appSettings      = appSettings;
 		_draftService     = draftService;
 		_codeIndexService = codeIndexService;
+		_profileService   = profileService;
 		_name             = node.Name;
 		_selectedModelIndex = Math.Clamp(appSettings.Settings.SelectedModelIndex, 0, ModelIds.Length - 1);
 		AutocompleteVm    = new AutocompleteViewModel(codeIndexService);
 		OutputSearchVm    = new OutputSearchViewModel(Messages);
+
+		RebuildProfileList();
+		_selectedProfileIndex = Math.Clamp(appSettings.Settings.SelectedProfileIndex, 0, Math.Max(0, AvailableProfiles.Count - 2));
 
 		node.WhenAnyValue(x => x.Name).Subscribe(n => Name = n);
 
@@ -475,7 +523,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				sessionId:        sessionId,
 				userMessage:      messageToSend,
 				onEvent:          HandleStreamEvent,
-				model:            SelectedModelId);
+				model:            SelectedModelId,
+				profileConfigDir: SelectedProfileConfigDir);
 
 			if (_needsContextRetry)
 			{
@@ -503,7 +552,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 					sessionId:        null,
 					userMessage:      enrichedMessage,
 					onEvent:          HandleStreamEvent,
-					model:            SelectedModelId);
+					model:            SelectedModelId,
+				profileConfigDir: SelectedProfileConfigDir);
 			}
 
 			// Post-response: handle Clear (FR.11.7)
@@ -730,6 +780,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			sessionId:        _node.Model.ClaudeSessionId,
 			userMessage:      Constants.Instructions.CompactionPrompt,
 			model:            SelectedModelId,
+			profileConfigDir: SelectedProfileConfigDir,
 			onEvent:          evt =>
 			{
 				if (evt.Type == "assistant" && !string.IsNullOrWhiteSpace(evt.Content))
@@ -805,6 +856,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			sessionId:        _node.Model.ClaudeSessionId,
 			userMessage:      prompt,
 			model:            SelectedModelId,
+			profileConfigDir: SelectedProfileConfigDir,
 			onEvent:          evt =>
 			{
 				// Capture session ID updates but don't write to file or UI
@@ -837,6 +889,112 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			sb.AppendLine($"- {Constants.Instructions.Clear}");
 
 		return sb.ToString();
+	}
+
+	/// <summary>Rebuilds the AvailableProfiles list from appsettings. Always ends with "New...".</summary>
+	private void RebuildProfileList()
+	{
+		AvailableProfiles.Clear();
+		AvailableProfiles.Add(_defaultProfileDisplayName ?? "Default");
+		foreach (var p in _appSettings.Settings.Profiles)
+			AvailableProfiles.Add(p.DisplayName);
+		AvailableProfiles.Add("New...");
+	}
+
+	private string? _defaultProfileDisplayName;
+
+	/// <summary>Resolves the default profile email on first load (fire-and-forget).</summary>
+	internal void ResolveDefaultProfileEmail()
+	{
+		_ = ResolveDefaultProfileEmailAsync();
+	}
+
+	private async Task ResolveDefaultProfileEmailAsync()
+	{
+		var email = await _profileService.GetAccountEmailAsync(_appSettings.Settings.ClaudePath, null);
+		if (!string.IsNullOrEmpty(email))
+		{
+			_defaultProfileDisplayName = email;
+			Dispatcher.UIThread.Post(() =>
+			{
+				if (AvailableProfiles.Count > 0)
+					AvailableProfiles[0] = email;
+			});
+		}
+	}
+
+	private async Task HandleNewProfileAsync()
+	{
+		if (_isProfileAuthInProgress)
+			return;
+
+		_isProfileAuthInProgress = true;
+		try
+		{
+			// Generate a unique profile ID
+			var existingIds = _appSettings.Settings.Profiles.Select(p => p.ProfileId).ToHashSet();
+			var profileId = "profile_1";
+			for (var i = 2; existingIds.Contains(profileId); i++)
+				profileId = $"profile_{i}";
+
+			// Build the config directory path for this profile
+			var configDir = System.IO.Path.Combine(_profileService.ProfilesRootDirectory, profileId);
+
+			// Launch interactive auth in a visible terminal
+			Messages.Add(new MessageEntryViewModel
+			{
+				Role      = Constants.SessionFile.RoleSystem,
+				Content   = $"Launching auth login for new profile... Complete authentication in the opened window.",
+				Timestamp = DateTimeOffset.UtcNow,
+			});
+
+			await _profileService.LaunchAuthLoginAsync(_appSettings.Settings.ClaudePath, configDir);
+
+			// Verify auth succeeded by querying the profile status
+			var email = await _profileService.GetAccountEmailAsync(_appSettings.Settings.ClaudePath, configDir);
+			if (string.IsNullOrEmpty(email))
+			{
+				Messages.Add(new MessageEntryViewModel
+				{
+					Role      = Constants.SessionFile.RoleSystem,
+					Content   = "Profile authentication was cancelled or failed.",
+					Timestamp = DateTimeOffset.UtcNow,
+				});
+				return;
+			}
+
+			var displayName = email;
+
+			// Add profile to settings
+			_appSettings.Settings.Profiles.Add(new ClaudeProfileModel
+			{
+				ProfileId   = profileId,
+				DisplayName = displayName,
+			});
+
+			// Select the newly added profile
+			var newIndex = _appSettings.Settings.Profiles.Count; // 1-based (0 is Default)
+			_appSettings.Settings.SelectedProfileIndex = newIndex;
+			_appSettings.Save();
+
+			Dispatcher.UIThread.Post(() =>
+			{
+				RebuildProfileList();
+				_selectedProfileIndex = newIndex;
+				this.RaisePropertyChanged(nameof(SelectedProfileIndex));
+			});
+
+			Messages.Add(new MessageEntryViewModel
+			{
+				Role      = Constants.SessionFile.RoleSystem,
+				Content   = $"Profile '{displayName}' added and selected.",
+				Timestamp = DateTimeOffset.UtcNow,
+			});
+		}
+		finally
+		{
+			_isProfileAuthInProgress = false;
+		}
 	}
 
 	private static MessageEntryViewModel EntryToViewModel(SessionEntryModel entry)

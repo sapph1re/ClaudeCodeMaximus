@@ -37,13 +37,14 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		string userMessage,
 		Action<ClaudeStreamEvent> onEvent,
 		string? model = null,
+		string? profileConfigDir = null,
 		CancellationToken cancellationToken = default)
 	{
 		var args = BuildArguments(sessionId, model);
-		_log.Debug("Attempting to spawn claude. Path={ClaudePath} Args={Args} WorkDir={WorkDir}",
-			claudePath, args, workingDirectory);
+		_log.Debug("Attempting to spawn claude. Path={ClaudePath} Args={Args} WorkDir={WorkDir} ConfigDir={ConfigDir}",
+			claudePath, args, workingDirectory, profileConfigDir);
 
-		Process? process = TryStartProcess(claudePath, args, workingDirectory);
+		Process? process = TryStartProcess(claudePath, args, workingDirectory, profileConfigDir);
 
 		// On Windows, 'claude' is often a .cmd file which requires cmd.exe to launch
 		// when UseShellExecute=false. Retry via cmd.exe /c if direct spawn failed.
@@ -51,7 +52,7 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		{
 			var cmdArgs = $"/c \"{claudePath}\" {args}";
 			_log.Debug("Direct spawn failed — retrying via cmd.exe /c. Args={CmdArgs}", cmdArgs);
-			process = TryStartProcess("cmd.exe", cmdArgs, workingDirectory);
+			process = TryStartProcess("cmd.exe", cmdArgs, workingDirectory, profileConfigDir);
 		}
 
 		if (process == null)
@@ -210,7 +211,7 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 		return args;
 	}
 
-	private static Process? TryStartProcess(string fileName, string arguments, string workingDirectory)
+	private static Process? TryStartProcess(string fileName, string arguments, string workingDirectory, string? profileConfigDir = null)
 	{
 		var psi = new ProcessStartInfo(fileName, arguments)
 		{
@@ -227,6 +228,10 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 
 		// Remove CLAUDECODE so claude doesn't refuse to run inside another claude session.
 		psi.Environment.Remove("CLAUDECODE");
+
+		// Set CLAUDE_CONFIG_DIR to isolate auth context for non-default profiles.
+		if (!string.IsNullOrEmpty(profileConfigDir))
+			psi.Environment["CLAUDE_CONFIG_DIR"] = profileConfigDir;
 
 		try
 		{

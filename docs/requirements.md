@@ -334,7 +334,7 @@ The application header bar provides per-session instruction toggles that modify 
 **FR.11.6 — Auto-Compact toggle:**
 - **Type:** One-shot toggle (auto-unsets after the compaction completes)
 - **Behavior:** When ON and Claude finishes responding to the user's prompt, the application automatically sends a **separate follow-up prompt** to Claude instructing it to compact the session. The follow-up prompt is:
-  `"Please compact the conversation in this session. Preserve the user's prompts (you may rephrase them for brevity and clarity, but keep the attribution that specific instructions or knowledge came from the user). Focus on preserving: decisions made during development, the reasoning behind those decisions, architecture choices, and implementation details that matter. Remove transient information such as debugging steps, intermediate failed attempts, progress updates, and unnecessary verbosity. Output the compacted conversation maintaining the USER/ASSISTANT turn structure."`
+  The compaction prompt instructs Claude to: preserve decisions and reasoning, architecture choices, user attribution, and **all URLs (full or partial)**; remove transient debugging steps, meta-instructions, and redundant corrections; restructure user inputs by semantic grouping (merge related follow-ups, only split on topic change); and output in session file format with `[timestamp] ROLE` headers.
 - **Post-compaction:** The compacted text returned by Claude replaces the session file content (rewritten, not appended). The Messages collection in the output window is also updated to reflect the compacted content.
 - **Auto-reset:** The toggle resets to OFF after the compaction prompt completes
 - **Icon:** Compress/shrink icon
@@ -390,6 +390,23 @@ The CLI accepts short aliases (`opus`, `sonnet`, `haiku`) which automatically re
 **FR.12.4 — Model persistence:** The selected model index is persisted in `appsettings.json` (`SelectedModelIndex`). It is a global setting (not per-session).
 
 **FR.12.5 — Model flag injection:** When a non-default model is selected, the `--model <id>` flag is appended to the `claude` CLI arguments for all process spawns (user messages, context retries, compaction, and mid-run corrections).
+
+**FR.12.6 — Profile selection:** The command bar contains a profile selector (ComboBox) to the right of the model selector. Each profile uses a separate `CLAUDE_CONFIG_DIR` directory, giving it an isolated authentication context with the Claude CLI. The dropdown displays the account email as the display text. A "Default" entry (index 0, no env var override) uses the CLI's default authentication. A "New..." entry at the bottom of the list triggers profile creation (FR.12.7).
+
+**FR.12.7 — Profile creation flow:** When "New..." is selected in the profile dropdown:
+1. A unique profile ID is generated (`profile_1`, `profile_2`, etc.) and a corresponding config directory created under `%APPDATA%\ClaudeMaximus\profiles\<profileId>\`
+2. A visible console window is spawned running `claude auth login` with `CLAUDE_CONFIG_DIR` set to the profile's config directory. On Windows, a temporary `.bat` file is written to the config directory that sets the env var via `set`, uses `call` to invoke the `.cmd` wrapper (ensuring cmd.exe waits for the full auth flow including the OAuth browser callback), and ends with a `pause` so the user sees the result. The `.bat` file is cleaned up after the process exits.
+3. After the console process exits, `claude auth status` is queried (with `CLAUDE_CONFIG_DIR` set) to verify authentication succeeded and retrieve the account email. If the email query fails (auth was not completed), the profile is not added and a failure message is shown.
+4. The profile is added to the persisted list with the email as display name
+5. The new profile is automatically selected
+
+The dropdown selection reverts to the previous value while auth is in progress, preventing the "New..." item from being persisted as the selected index.
+
+**FR.12.8 — Profile persistence:** Profiles are stored in `appsettings.json` as a list of `ClaudeProfileModel` objects with `ProfileId` (string, used as the config subdirectory name) and `DisplayName` (string, typically the account email). The selected profile index is a global setting (`SelectedProfileIndex`). Index 0 = Default (no env var), indices 1..N map to stored profiles. Each profile's auth state lives in `%APPDATA%\ClaudeMaximus\profiles\<ProfileId>\`.
+
+**FR.12.9 — Profile config dir injection:** When a non-default profile is selected, the `CLAUDE_CONFIG_DIR` environment variable is set to the profile's config directory on all spawned `claude` CLI processes (user messages, context retries, compaction, and mid-run corrections). This isolates session IDs, auth tokens, and settings per profile.
+
+**FR.12.10 — Default profile email resolution:** On first session load, the application queries `claude auth status` (no config dir override) to retrieve the default account email. If successful, the "Default" entry in the profile dropdown is updated to show the email address instead of the generic "Default" label.
 
 ---
 

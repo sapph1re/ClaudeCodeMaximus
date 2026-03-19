@@ -9,6 +9,15 @@ namespace ClaudeMaximus.Models;
 /// <remarks>Created by Claude</remarks>
 public sealed class AppSettingsModel
 {
+	/// <summary>Claude CLI profiles with separate authentication contexts.</summary>
+	public List<ClaudeProfileModel> Profiles { get; set; } = [];
+
+	/// <summary>
+	/// Selected Claude CLI profile index. 0 = Default (no --profile flag).
+	/// Indices 1..N map to Profiles[0..N-1]. Last virtual index = "New..." action.
+	/// </summary>
+	public int SelectedProfileIndex { get; set; }
+
 	public string SessionFilesRoot { get; set; } = string.Empty;
 	public string ClaudePath { get; set; } = "claude";
 	public WindowStateModel Window { get; set; } = new();

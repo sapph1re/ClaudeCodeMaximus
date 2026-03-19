@@ -26,6 +26,7 @@ public interface IClaudeProcessManager
 		string userMessage,
 		Action<ClaudeStreamEvent> onEvent,
 		string? model = null,
+		string? profileConfigDir = null,
 		CancellationToken cancellationToken = default);
 
 	/// <summary>

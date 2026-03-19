@@ -88,6 +88,7 @@ public partial class App : Application
 		services.AddSingleton<IClaudeSessionImportService, ClaudeSessionImportService>();
 		services.AddSingleton<IClaudeAssistService, ClaudeAssistService>();
 		services.AddSingleton<IKeyBindingService, KeyBindingService>();
+		services.AddSingleton<IClaudeProfileService, ClaudeProfileService>();
 		services.AddSingleton<SessionTreeViewModel>();
 		services.AddSingleton<MainWindowViewModel>();
 		services.AddTransient<SettingsViewModel>();
