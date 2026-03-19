@@ -27,6 +27,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private readonly IDraftService _draftService;
 	private readonly ICodeIndexService _codeIndexService;
 	private readonly IClaudeProfileService _profileService;
+	private readonly IClaudeSessionImportService _importService;
 	private string _name;
 	private string _inputText = string.Empty;
 	private bool _isBusy;
@@ -44,7 +45,10 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private bool _isCommandBarVisible;
 	private int _selectedModelIndex;
 	private FileSystemWatcher? _fileWatcher;
+	private FileSystemWatcher? _jsonlWatcher;
 	private Timer? _fileChangeDebounceTimer;
+	private Timer? _jsonlChangeDebounceTimer;
+	private int _lastKnownEntryCount;
 	private int _selectedProfileIndex;
 	private bool _isProfileAuthInProgress;
 
@@ -298,7 +302,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		IAppSettingsService appSettings,
 		IDraftService draftService,
 		ICodeIndexService codeIndexService,
-		IClaudeProfileService profileService)
+		IClaudeProfileService profileService,
+		IClaudeSessionImportService importService)
 	{
 		_node             = node;
 		_fileService      = fileService;
@@ -307,6 +312,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_draftService     = draftService;
 		_codeIndexService = codeIndexService;
 		_profileService   = profileService;
+		_importService    = importService;
 		_name             = node.Name;
 		_selectedModelIndex = Math.Clamp(appSettings.Settings.SelectedModelIndex, 0, ModelIds.Length - 1);
 		AutocompleteVm    = new AutocompleteViewModel(codeIndexService);
@@ -345,37 +351,80 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			_node.HasDraftText = !string.IsNullOrWhiteSpace(draft);
 		}
 
+		_lastKnownEntryCount = Messages.Count;
 		StartFileWatcher();
 	}
 
 	public void Dispose()
 	{
 		_fileWatcher?.Dispose();
+		_jsonlWatcher?.Dispose();
 		_fileChangeDebounceTimer?.Dispose();
+		_jsonlChangeDebounceTimer?.Dispose();
 	}
 
 	private void StartFileWatcher()
 	{
+		// Watch the Maximus .txt session file
 		try
 		{
 			var fullPath = _fileService.GetFullPath(_node.FileName);
 			var directory = Path.GetDirectoryName(fullPath);
 			var fileName = Path.GetFileName(fullPath);
 
-			if (directory == null || !Directory.Exists(directory))
+			if (directory != null && Directory.Exists(directory))
+			{
+				_fileWatcher = new FileSystemWatcher(directory, fileName)
+				{
+					NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
+					EnableRaisingEvents = true,
+				};
+				_fileWatcher.Changed += OnSessionFileChanged;
+			}
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "Failed to start .txt file watcher for session {FileName}", _node.FileName);
+		}
+
+		// Watch the Claude Code JSONL file (for sessions running externally)
+		StartJsonlWatcher();
+	}
+
+	private void StartJsonlWatcher()
+	{
+		var sessionId = _node.Model.ClaudeSessionId;
+		if (string.IsNullOrEmpty(sessionId) || string.IsNullOrEmpty(WorkingDirectory))
+			return;
+
+		try
+		{
+			var slug = Constants.ClaudeSessions.BuildProjectSlug(WorkingDirectory);
+			var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+			var jsonlDir = Path.Combine(
+				userProfile,
+				Constants.ClaudeSessions.ClaudeHomeFolderName,
+				Constants.ClaudeSessions.ProjectsFolderName,
+				slug);
+
+			var jsonlFileName = sessionId + Constants.ClaudeSessions.SessionFileExtension;
+			var jsonlPath = Path.Combine(jsonlDir, jsonlFileName);
+
+			if (!Directory.Exists(jsonlDir))
 				return;
 
-			_fileWatcher = new FileSystemWatcher(directory, fileName)
+			_log.Debug("Starting JSONL watcher for {Path}", jsonlPath);
+
+			_jsonlWatcher = new FileSystemWatcher(jsonlDir, jsonlFileName)
 			{
 				NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
 				EnableRaisingEvents = true,
 			};
-
-			_fileWatcher.Changed += OnSessionFileChanged;
+			_jsonlWatcher.Changed += OnJsonlFileChanged;
 		}
 		catch (Exception ex)
 		{
-			_log.Warning(ex, "Failed to start file watcher for session {FileName}", _node.FileName);
+			_log.Warning(ex, "Failed to start JSONL watcher for session {SessionId}", sessionId);
 		}
 	}
 
@@ -385,12 +434,25 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		if (IsBusy)
 			return;
 
-		// Debounce: wait for writes to settle before re-reading
 		_fileChangeDebounceTimer?.Dispose();
 		_fileChangeDebounceTimer = new Timer(
 			_ => RefreshFromFile(),
 			null,
 			500,
+			Timeout.Infinite);
+	}
+
+	private void OnJsonlFileChanged(object sender, FileSystemEventArgs e)
+	{
+		// Ignore changes when we're actively sending (our own process writes to the JSONL too)
+		if (IsBusy)
+			return;
+
+		_jsonlChangeDebounceTimer?.Dispose();
+		_jsonlChangeDebounceTimer = new Timer(
+			_ => RefreshFromJsonl(e.FullPath),
+			null,
+			1000,
 			Timeout.Infinite);
 	}
 
@@ -437,6 +499,54 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		catch (Exception ex)
 		{
 			_log.Debug("FileWatcher: error reading {FileName}: {Error}", _node.FileName, ex.Message);
+		}
+	}
+
+	private void RefreshFromJsonl(string jsonlPath)
+	{
+		try
+		{
+			// Parse the full JSONL and find entries beyond what we already have
+			var allEntries = _importService.ParseJsonlSession(jsonlPath);
+
+			// Filter to displayable entries (same logic as LoadFromFile)
+			var displayable = new List<SessionEntryModel>();
+			foreach (var entry in allEntries)
+			{
+				if (entry.Role != Constants.SessionFile.RoleCompaction
+				    && string.IsNullOrWhiteSpace(entry.Content))
+					continue;
+				displayable.Add(entry);
+			}
+
+			if (displayable.Count <= _lastKnownEntryCount)
+				return;
+
+			var newEntries = displayable.Skip(_lastKnownEntryCount).ToList();
+			_log.Information("JSONL watcher: {Count} new entries detected from JSONL", newEntries.Count);
+
+			// Append new entries to the Maximus .txt file for persistence
+			foreach (var entry in newEntries)
+				_fileService.AppendMessage(_node.FileName, entry.Role, entry.Content);
+
+			_lastKnownEntryCount = displayable.Count;
+
+			Dispatcher.UIThread.Post(() =>
+			{
+				foreach (var entry in newEntries)
+					Messages.Add(EntryToViewModel(entry));
+
+				var lastUser = newEntries.LastOrDefault(e => e.Role == Constants.SessionFile.RoleUser);
+				if (lastUser != null)
+				{
+					_node.LastPromptTimestamp = lastUser.Timestamp;
+					_node.LastPromptTime = lastUser.Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
+				}
+			});
+		}
+		catch (Exception ex)
+		{
+			_log.Debug("JSONL watcher: error reading {Path}: {Error}", jsonlPath, ex.Message);
 		}
 	}
 
