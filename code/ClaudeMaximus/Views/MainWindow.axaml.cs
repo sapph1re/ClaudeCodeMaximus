@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 using Avalonia;
@@ -229,32 +230,41 @@ public partial class MainWindow : Window
 		if (DataContext is not MainWindowViewModel vm)
 			return;
 
-		// Determine the working directory from the currently selected tree node
-		string? workingDirectory = null;
-		DirectoryNodeViewModel? dirNode = null;
-
-		var selectedSession = vm.SessionTree.SelectedSession;
-		if (selectedSession != null)
-		{
-			workingDirectory = selectedSession.Model.WorkingDirectory;
-			// Find the DirectoryNodeViewModel that owns this session
-			dirNode = FindDirectoryForPath(vm.SessionTree, workingDirectory);
-		}
-
-		if (workingDirectory == null || dirNode == null)
+		if (vm.SessionTree.Directories.Count == 0)
 			return;
 
 		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
 		var assistService = App.Services.GetRequiredService<IClaudeAssistService>();
+		var labelService = App.Services.GetRequiredService<IDirectoryLabelService>();
+
+		// Build directory list for the picker
+		var dirEntries = vm.SessionTree.Directories.Select(d =>
+			new ImportPickerViewModel.DirectoryEntry
+			{
+				Path = d.Path,
+				DisplayName = d.Label,
+			}).ToList();
+
+		// Pre-select from active session if available
+		string? initialPath = vm.SessionTree.SelectedSession?.Model.WorkingDirectory;
 
 		var pickerVm = new ImportPickerViewModel(importService, assistService);
 		var alreadyImportedIds = vm.SessionTree.CollectAllClaudeSessionIds();
-		pickerVm.DiscoverSessions(workingDirectory, alreadyImportedIds);
+		pickerVm.Initialize(dirEntries, initialPath, alreadyImportedIds);
 
 		var picker = new ImportPickerWindow { DataContext = pickerVm };
 		await picker.ShowDialog(this);
 
 		if (picker.Result == null || picker.Result.Count == 0)
+			return;
+
+		// Determine which directory to import into based on the picker's selected directory
+		var selectedPath = pickerVm.SelectedDirectory?.Path;
+		var dirNode = selectedPath != null
+			? FindDirectoryForPath(vm.SessionTree, selectedPath)
+			: null;
+
+		if (dirNode == null)
 			return;
 
 		var fileService = App.Services.GetRequiredService<ISessionFileService>();

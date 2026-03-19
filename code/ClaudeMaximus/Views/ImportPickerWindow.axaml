@@ -13,6 +13,15 @@
 
     <DockPanel Margin="12">
 
+        <!-- Directory selector -->
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8"
+                   IsVisible="{Binding HasDirectories}" x:CompileBindings="False">
+            <TextBlock DockPanel.Dock="Left" Text="Directory:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <ComboBox ItemsSource="{Binding Directories}"
+                      SelectedItem="{Binding SelectedDirectory}"
+                      HorizontalAlignment="Stretch"/>
+        </DockPanel>
+
         <!-- Top: Search bar -->
         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
             <TextBlock DockPanel.Dock="Left" Text="Search:" VerticalAlignment="Center" Margin="0,0,8,0"/>

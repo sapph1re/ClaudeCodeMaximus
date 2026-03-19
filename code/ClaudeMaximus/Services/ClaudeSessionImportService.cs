@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -12,6 +13,15 @@ namespace ClaudeMaximus.Services;
 public sealed class ClaudeSessionImportService : IClaudeSessionImportService
 {
 	private static readonly ILogger _log = Log.ForContext<ClaudeSessionImportService>();
+
+	/// <summary>Session ID → generated title cache. Survives across dialog open/close cycles.</summary>
+	private readonly ConcurrentDictionary<string, string> _titleCache = new();
+
+	public void CacheTitle(string sessionId, string title)
+		=> _titleCache[sessionId] = title;
+
+	public string? GetCachedTitle(string sessionId)
+		=> _titleCache.TryGetValue(sessionId, out var title) ? title : null;
 
 	public IReadOnlyList<ClaudeSessionSummaryModel> DiscoverSessions(string workingDirectory)
 	{
@@ -41,7 +51,13 @@ public sealed class ClaudeSessionImportService : IClaudeSessionImportService
 			{
 				var summary = ExtractSummary(sessionId, jsonlPath);
 				if (summary != null)
+				{
+					// Apply cached title if available
+					var cached = GetCachedTitle(sessionId);
+					if (cached != null)
+						summary.GeneratedTitle = cached;
 					results.Add(summary);
+				}
 			}
 			catch (Exception ex)
 			{

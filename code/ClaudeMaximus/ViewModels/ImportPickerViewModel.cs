@@ -31,6 +31,8 @@ public sealed class ImportPickerViewModel : ViewModelBase
 	private double _titleProgressMax = 1;
 	private CancellationTokenSource? _titleCts;
 	private ImportSessionItemViewModel? _selectedItem;
+	private DirectoryEntry? _selectedDirectory;
+	private IReadOnlySet<string> _alreadyImportedIds = new HashSet<string>();
 
 	/// <summary>All discovered session items (master list).</summary>
 	private List<ImportSessionItemViewModel> _allItems = [];
@@ -41,8 +43,19 @@ public sealed class ImportPickerViewModel : ViewModelBase
 	/// <summary>Preview entries for the currently focused (highlighted) item.</summary>
 	public ObservableCollection<PreviewEntryViewModel> PreviewEntries { get; } = [];
 
+	/// <summary>Available directories for the directory selector.</summary>
+	public ObservableCollection<DirectoryEntry> Directories { get; } = [];
+
 	/// <summary>Maximum number of user+assistant entries to show in preview.</summary>
 	private const int PreviewEntryLimit = 8;
+
+	/// <summary>Lightweight entry for the directory selector combo box.</summary>
+	public sealed class DirectoryEntry
+	{
+		public required string Path { get; init; }
+		public required string DisplayName { get; init; }
+		public override string ToString() => DisplayName;
+	}
 
 	public string SearchText
 	{
@@ -100,6 +113,18 @@ public sealed class ImportPickerViewModel : ViewModelBase
 		}
 	}
 
+	public DirectoryEntry? SelectedDirectory
+	{
+		get => _selectedDirectory;
+		set
+		{
+			if (this.RaiseAndSetIfChanged(ref _selectedDirectory, value) != null && value != null)
+				RediscoverForDirectory(value.Path);
+		}
+	}
+
+	public bool HasDirectories => Directories.Count > 1;
+
 	public bool HasPreview => PreviewEntries.Count > 0;
 
 	public bool HasItems => Items.Count > 0;
@@ -121,14 +146,53 @@ public sealed class ImportPickerViewModel : ViewModelBase
 	}
 
 	/// <summary>
-	/// Discovers sessions for the given working directory and populates the picker.
+	/// Sets up the directory list and discovers sessions for the initial working directory.
+	/// </summary>
+	public void Initialize(
+		IReadOnlyList<DirectoryEntry> directories,
+		string? initialWorkingDirectory,
+		IReadOnlySet<string> alreadyImportedIds)
+	{
+		_alreadyImportedIds = alreadyImportedIds;
+
+		Directories.Clear();
+		foreach (var dir in directories)
+			Directories.Add(dir);
+		this.RaisePropertyChanged(nameof(HasDirectories));
+
+		// Select the initial directory (without triggering rediscovery since we call it explicitly)
+		_selectedDirectory = directories.FirstOrDefault(d =>
+			string.Equals(d.Path, initialWorkingDirectory, StringComparison.OrdinalIgnoreCase))
+			?? directories.FirstOrDefault();
+		this.RaisePropertyChanged(nameof(SelectedDirectory));
+
+		if (_selectedDirectory != null)
+			PopulateFromDirectory(_selectedDirectory.Path);
+	}
+
+	/// <summary>
+	/// Legacy entry point: discovers for a single directory without directory selector.
 	/// </summary>
 	public void DiscoverSessions(string workingDirectory, IReadOnlySet<string> alreadyImportedIds)
+	{
+		_alreadyImportedIds = alreadyImportedIds;
+		PopulateFromDirectory(workingDirectory);
+	}
+
+	private void RediscoverForDirectory(string workingDirectory)
+	{
+		CancelTitleGeneration();
+		PreviewEntries.Clear();
+		this.RaisePropertyChanged(nameof(HasPreview));
+		PopulateFromDirectory(workingDirectory);
+	}
+
+	private void PopulateFromDirectory(string workingDirectory)
 	{
 		var summaries = _importService.DiscoverSessions(workingDirectory);
 
 		_allItems = summaries.Select(s =>
-			new ImportSessionItemViewModel(s, alreadyImportedIds.Contains(s.SessionId))
+			new ImportSessionItemViewModel(s, _alreadyImportedIds.Contains(s.SessionId))
 		).ToList();
 
 		Items.Clear();
@@ -143,7 +207,7 @@ public sealed class ImportPickerViewModel : ViewModelBase
 		else
 			StatusMessage = $"Found {_allItems.Count} sessions.";
 
-		// Start async title generation
+		// Start async title generation (only for sessions without cached titles)
 		_ = GenerateTitlesAsync();
 	}
 
@@ -214,8 +278,9 @@ public sealed class ImportPickerViewModel : ViewModelBase
 		_titleCts = new CancellationTokenSource();
 		var ct = _titleCts.Token;
 
+		// Only generate titles for sessions that don't already have one (from cache or prior generation)
 		var pendingItems = _allItems
-			.Where(i => i.Summary.FirstUserPrompt != null)
+			.Where(i => i.Summary.FirstUserPrompt != null && i.Summary.GeneratedTitle == null)
 			.ToList();
 		var summaries = pendingItems.Select(i => i.Summary).ToList();
 
@@ -258,6 +323,10 @@ public sealed class ImportPickerViewModel : ViewModelBase
 
 	private void OnBatchComplete(Dictionary<string, string> allTitlesSoFar)
 	{
+		// Cache all titles for future dialog opens
+		foreach (var (sessionId, title) in allTitlesSoFar)
+			_importService.CacheTitle(sessionId, title);
+
 		Avalonia.Threading.Dispatcher.UIThread.Post(() =>
 		{
 			foreach (var (sessionId, title) in allTitlesSoFar)
