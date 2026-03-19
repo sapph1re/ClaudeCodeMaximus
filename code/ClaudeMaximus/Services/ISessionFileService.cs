@@ -20,6 +20,9 @@ public interface ISessionFileService
 
 	bool SessionFileExists(string fileName);
 
+	/// <summary>Returns the full filesystem path for a session file name.</summary>
+	string GetFullPath(string fileName);
+
 	/// <summary>Atomically rewrites the session file with new content (write .tmp then rename).</summary>
 	void RewriteSessionFile(string fileName, string content);
 

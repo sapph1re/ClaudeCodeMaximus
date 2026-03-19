@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Reactive;
 using System.Text;
+using System.Threading;
 using Avalonia.Threading;
 using ClaudeMaximus.Models;
 using ClaudeMaximus.Services;
@@ -13,7 +15,7 @@ using Serilog;
 namespace ClaudeMaximus.ViewModels;
 
 /// <remarks>Created by Claude</remarks>
-public sealed class SessionViewModel : ViewModelBase
+public sealed class SessionViewModel : ViewModelBase, IDisposable
 {
 	private static readonly ILogger _log = Log.ForContext<SessionViewModel>();
 
@@ -39,6 +41,8 @@ public sealed class SessionViewModel : ViewModelBase
 	private DispatcherTimer? _draftDebounceTimer;
 	private bool _isCommandBarVisible;
 	private int _selectedModelIndex;
+	private FileSystemWatcher? _fileWatcher;
+	private Timer? _fileChangeDebounceTimer;
 
 	public string Name
 	{
@@ -291,6 +295,100 @@ public sealed class SessionViewModel : ViewModelBase
 		{
 			_inputText = draft;
 			_node.HasDraftText = !string.IsNullOrWhiteSpace(draft);
+		}
+
+		StartFileWatcher();
+	}
+
+	public void Dispose()
+	{
+		_fileWatcher?.Dispose();
+		_fileChangeDebounceTimer?.Dispose();
+	}
+
+	private void StartFileWatcher()
+	{
+		try
+		{
+			var fullPath = _fileService.GetFullPath(_node.FileName);
+			var directory = Path.GetDirectoryName(fullPath);
+			var fileName = Path.GetFileName(fullPath);
+
+			if (directory == null || !Directory.Exists(directory))
+				return;
+
+			_fileWatcher = new FileSystemWatcher(directory, fileName)
+			{
+				NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
+				EnableRaisingEvents = true,
+			};
+
+			_fileWatcher.Changed += OnSessionFileChanged;
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "Failed to start file watcher for session {FileName}", _node.FileName);
+		}
+	}
+
+	private void OnSessionFileChanged(object sender, FileSystemEventArgs e)
+	{
+		// Ignore changes caused by our own writes (IsBusy covers all write paths)
+		if (IsBusy)
+			return;
+
+		// Debounce: wait for writes to settle before re-reading
+		_fileChangeDebounceTimer?.Dispose();
+		_fileChangeDebounceTimer = new Timer(
+			_ => RefreshFromFile(),
+			null,
+			500,
+			Timeout.Infinite);
+	}
+
+	private void RefreshFromFile()
+	{
+		try
+		{
+			var entries = _fileService.ReadEntries(_node.FileName);
+			var currentCount = 0;
+
+			// Count non-empty entries to compare with current Messages
+			var newEntries = new List<SessionEntryModel>();
+			foreach (var entry in entries)
+			{
+				if (entry.Role != Constants.SessionFile.RoleCompaction
+				    && string.IsNullOrWhiteSpace(entry.Content))
+					continue;
+
+				currentCount++;
+				if (currentCount > Messages.Count)
+					newEntries.Add(entry);
+			}
+
+			if (newEntries.Count == 0)
+				return;
+
+			_log.Information("FileWatcher: {Count} new entries detected in {FileName}",
+				newEntries.Count, _node.FileName);
+
+			Dispatcher.UIThread.Post(() =>
+			{
+				foreach (var entry in newEntries)
+					Messages.Add(EntryToViewModel(entry));
+
+				// Update last prompt time if new entries include a user message
+				var lastUser = newEntries.LastOrDefault(e => e.Role == Constants.SessionFile.RoleUser);
+				if (lastUser != null)
+				{
+					_node.LastPromptTimestamp = lastUser.Timestamp;
+					_node.LastPromptTime = lastUser.Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
+				}
+			});
+		}
+		catch (Exception ex)
+		{
+			_log.Debug("FileWatcher: error reading {FileName}: {Error}", _node.FileName, ex.Message);
 		}
 	}
 

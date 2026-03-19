@@ -126,7 +126,7 @@ public sealed class SessionFileService : ISessionFileService
 		return repaired;
 	}
 
-	private string GetFullPath(string fileName)
+	public string GetFullPath(string fileName)
 		=> Path.Combine(_appSettings.Settings.SessionFilesRoot, fileName);
 
 	private void AppendToFile(string fileName, string text)
