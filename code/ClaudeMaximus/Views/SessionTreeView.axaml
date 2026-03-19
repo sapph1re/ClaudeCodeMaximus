@@ -120,6 +120,9 @@
                                              IsVisible="{Binding IsResumable}"/>
                                     <Ellipse Width="8" Height="8" Fill="LimeGreen"
                                              IsVisible="{Binding IsRunning}"/>
+                                    <Ellipse Width="8" Height="8" Fill="Orange" Opacity="0.8"
+                                             IsVisible="{Binding IsExternallyActive}"
+                                             ToolTip.Tip="Active in external terminal"/>
                                 </Panel>
                                 <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
                                            Foreground="{Binding MoveForeground}"/>

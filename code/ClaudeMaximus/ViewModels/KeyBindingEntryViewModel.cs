@@ -20,6 +20,7 @@ public sealed class KeyBindingEntryViewModel : ViewModelBase
 		Constants.KeyBindings.AddDirectory => "Add Directory",
 		Constants.KeyBindings.OpenSettings => "Open Settings",
 		Constants.KeyBindings.CloseDialog => "Close Dialog",
+		Constants.KeyBindings.Send => "Send Message",
 		_ => ActionName,
 	};
 

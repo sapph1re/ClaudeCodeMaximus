@@ -101,6 +101,7 @@ Use the original timestamps from the conversation. Each entry starts with a [tim
 		public const string AddDirectory = "AddDirectory";
 		public const string OpenSettings = "OpenSettings";
 		public const string CloseDialog = "CloseDialog";
+		public const string Send = "Send";
 	}
 
 	public static class ClaudeSessions

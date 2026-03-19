@@ -29,6 +29,7 @@ public sealed class KeyBindingsModel
 			model.Bindings[Constants.KeyBindings.AddDirectory] = "Cmd+O";
 			model.Bindings[Constants.KeyBindings.OpenSettings] = "Cmd+OemComma";
 			model.Bindings[Constants.KeyBindings.CloseDialog] = "Escape, Cmd+W";
+			model.Bindings[Constants.KeyBindings.Send] = "Cmd+Enter";
 		}
 		else
 		{
@@ -36,6 +37,7 @@ public sealed class KeyBindingsModel
 			model.Bindings[Constants.KeyBindings.AddDirectory] = "Ctrl+O";
 			model.Bindings[Constants.KeyBindings.OpenSettings] = "Ctrl+OemComma";
 			model.Bindings[Constants.KeyBindings.CloseDialog] = "Escape, Ctrl+W";
+			model.Bindings[Constants.KeyBindings.Send] = "Ctrl+Enter";
 		}
 
 		return model;

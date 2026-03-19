@@ -75,6 +75,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		private set => this.RaiseAndSetIfChanged(ref _isBusy, value);
 	}
 
+	/// <summary>True when this session is being actively used in an external terminal.</summary>
+	public bool IsExternallyActive => _node.IsExternallyActive;
+
 	public string ThinkingDuration
 	{
 		get => _thinkingDuration;
@@ -322,6 +325,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_selectedProfileIndex = Math.Clamp(appSettings.Settings.SelectedProfileIndex, 0, Math.Max(0, AvailableProfiles.Count - 2));
 
 		node.WhenAnyValue(x => x.Name).Subscribe(n => Name = n);
+		node.WhenAnyValue(x => x.IsExternallyActive).Subscribe(_ => this.RaisePropertyChanged(nameof(IsExternallyActive)));
 
 		SendCommand           = ReactiveCommand.Create(() => { _ = SendAsync(); });
 		ToggleMarkdownCommand = ReactiveCommand.Create(() => { IsMarkdownMode = !IsMarkdownMode; });
@@ -448,12 +452,80 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		if (IsBusy)
 			return;
 
+		// Quick check: read the last line to detect if Claude is actively working
+		DetectExternalActivity(e.FullPath);
+
 		_jsonlChangeDebounceTimer?.Dispose();
 		_jsonlChangeDebounceTimer = new Timer(
 			_ => RefreshFromJsonl(e.FullPath),
 			null,
 			1000,
 			Timeout.Infinite);
+	}
+
+	private void DetectExternalActivity(string jsonlPath)
+	{
+		try
+		{
+			var lastLine = ReadLastLine(jsonlPath);
+			if (lastLine == null)
+				return;
+
+			using var doc = System.Text.Json.JsonDocument.Parse(lastLine);
+			var type = doc.RootElement.TryGetProperty("type", out var typeEl)
+				? typeEl.GetString() : null;
+
+			// progress, assistant (mid-stream), system with task_progress → active
+			// result → done
+			var isActive = type is "progress" or "assistant";
+
+			Dispatcher.UIThread.Post(() => _node.IsExternallyActive = isActive);
+		}
+		catch
+		{
+			// Best effort — don't crash on parse errors
+		}
+	}
+
+	/// <summary>Reads the last non-empty line from a file without loading it all into memory.</summary>
+	private static string? ReadLastLine(string path)
+	{
+		try
+		{
+			using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+			if (stream.Length == 0)
+				return null;
+
+			// Seek backwards from end to find the last newline
+			var pos = stream.Length - 1;
+			// Skip trailing newlines
+			while (pos > 0)
+			{
+				stream.Position = pos;
+				var b = stream.ReadByte();
+				if (b != '\n' && b != '\r')
+					break;
+				pos--;
+			}
+
+			// Find the start of the last line
+			while (pos > 0)
+			{
+				stream.Position = pos - 1;
+				var b = stream.ReadByte();
+				if (b == '\n')
+					break;
+				pos--;
+			}
+
+			stream.Position = pos;
+			using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
+			return reader.ReadLine();
+		}
+		catch
+		{
+			return null;
+		}
 	}
 
 	private void RefreshFromFile()
