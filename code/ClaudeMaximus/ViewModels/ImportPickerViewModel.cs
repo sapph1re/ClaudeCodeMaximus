@@ -347,11 +347,12 @@ public sealed class ImportPickerViewModel : ViewModelBase
 
 		Avalonia.Threading.Dispatcher.UIThread.Post(() =>
 		{
+			// Always apply titles unconditionally — don't check IsTitlePending here
+			// because the await continuation may clear it before this Post runs
 			foreach (var (sessionId, title) in allTitlesSoFar)
 			{
 				var item = _allItems.FirstOrDefault(i => i.SessionId == sessionId);
-				if (item != null && item.IsTitlePending)
-					item.UpdateTitle(title);
+				item?.UpdateTitle(title);
 			}
 
 			TitleProgressValue = allTitlesSoFar.Count;

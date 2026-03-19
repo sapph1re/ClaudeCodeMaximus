@@ -50,14 +50,14 @@ public sealed class ClaudeSessionImportService : IClaudeSessionImportService
 			try
 			{
 				var summary = ExtractSummary(sessionId, jsonlPath);
-				if (summary != null)
-				{
-					// Apply cached title if available
-					var cached = GetCachedTitle(sessionId);
-					if (cached != null)
-						summary.GeneratedTitle = cached;
-					results.Add(summary);
-				}
+				if (summary == null || summary.MessageCount == 0)
+					continue;
+
+				// Apply cached title if available
+				var cached = GetCachedTitle(sessionId);
+				if (cached != null)
+					summary.GeneratedTitle = cached;
+				results.Add(summary);
 			}
 			catch (Exception ex)
 			{
