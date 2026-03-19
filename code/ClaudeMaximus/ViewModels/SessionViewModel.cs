@@ -807,6 +807,10 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			_busyCount = Math.Max(0, _busyCount - 1);
 			if (_busyCount == 0)
 			{
+				// Update JSONL entry count before IsBusy goes false, so the watcher
+				// doesn't re-detect entries we already processed during this send cycle.
+				_lastKnownEntryCount = InitializeJsonlEntryCount();
+
 				var t = _thinkingTimer;
 				_thinkingTimer = null;
 				t?.Stop();

@@ -314,6 +314,11 @@ public sealed class ClaudeSessionImportService : IClaudeSessionImportService
 		if (content == null)
 			return null;
 
+		// Strip Maximus-injected instruction blocks (appended to messages sent to Claude)
+		var delimIdx = content.IndexOf(Constants.Instructions.Delimiter, StringComparison.Ordinal);
+		if (delimIdx >= 0)
+			content = content[..delimIdx].TrimEnd();
+
 		if (maxLength > 0 && content.Length > maxLength)
 			return content[..maxLength];
 

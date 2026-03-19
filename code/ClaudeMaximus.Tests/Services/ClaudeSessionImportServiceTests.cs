@@ -152,6 +152,22 @@ public sealed class ClaudeSessionImportServiceTests : IDisposable
 		Assert.Equal("Array format message", entries[0].Content);
 	}
 
+	[Fact]
+	public void ParseJsonlSession_StripsInjectedInstructions()
+	{
+		// Simulate a JSONL user message that contains Maximus-injected instruction block
+		var augmented = "Hello Claude" + Constants.Instructions.Delimiter
+		                + "\n- Once you have completed the request, commit all your changes to git.";
+		var escaped = JsonEncodedText.Encode(augmented).ToString();
+		var path = WriteJsonlFile("test-strip-instructions",
+			JsonLine("user", $$"""{"role":"user","content":"{{escaped}}"}""", "2026-03-10T10:00:00Z"));
+
+		var entries = _sut.ParseJsonlSession(path);
+
+		Assert.Single(entries);
+		Assert.Equal("Hello Claude", entries[0].Content);
+	}
+
 	// --- DiscoverSessions tests (uses temp dir as fake slug dir) ---
 	// Note: DiscoverSessions reads from ~/.claude which we can't mock easily.
 	// These tests validate the parsing/summary extraction logic indirectly through ParseJsonlSession.
