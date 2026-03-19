@@ -23,7 +23,7 @@
                 Command="{Binding SaveCommand}"
                 Click="OnSaveClicked"/>
 
-        <TabControl>
+        <TabControl FontSize="13">
 
             <!-- General tab -->
             <TabItem Header="General">
