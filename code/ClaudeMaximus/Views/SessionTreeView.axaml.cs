@@ -173,6 +173,7 @@ public partial class SessionTreeView : UserControl
 
 		_suppressSelectionSync = true;
 		vm.SelectedSession = selected is SessionNodeViewModel session ? session : null;
+		vm.SelectedTreeItem = selected as ViewModelBase;
 		_suppressSelectionSync = false;
 	}
 

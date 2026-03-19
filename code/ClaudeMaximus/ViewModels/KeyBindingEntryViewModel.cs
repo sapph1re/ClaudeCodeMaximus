@@ -17,6 +17,8 @@ public sealed class KeyBindingEntryViewModel : ViewModelBase
 	public string DisplayName => ActionName switch
 	{
 		Constants.KeyBindings.ImportSessions => "Import Sessions",
+		Constants.KeyBindings.AddDirectory => "Add Directory",
+		Constants.KeyBindings.OpenSettings => "Open Settings",
 		Constants.KeyBindings.CloseDialog => "Close Dialog",
 		_ => ActionName,
 	};

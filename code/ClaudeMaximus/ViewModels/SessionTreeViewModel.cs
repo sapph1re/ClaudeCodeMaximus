@@ -25,6 +25,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	private readonly IGitOriginService _gitOriginService;
 	private string _searchText = string.Empty;
 	private SessionNodeViewModel? _selectedSession;
+	private ViewModelBase? _selectedTreeItem;
 	private CancellationTokenSource? _searchCts;
 
 	// ── Move mode state ──────────────────────────────────────────────────────
@@ -57,6 +58,27 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	{
 		get => _selectedSession;
 		set => this.RaiseAndSetIfChanged(ref _selectedSession, value);
+	}
+
+	/// <summary>Tracks the last selected tree item (directory, group, or session) for context-aware hotkeys.</summary>
+	public ViewModelBase? SelectedTreeItem
+	{
+		get => _selectedTreeItem;
+		set => this.RaiseAndSetIfChanged(ref _selectedTreeItem, value);
+	}
+
+	/// <summary>
+	/// Resolves the working directory and import target key from the currently selected tree item.
+	/// </summary>
+	public (string? WorkingDirectory, string? TargetKey) GetSelectedImportContext()
+	{
+		return SelectedTreeItem switch
+		{
+			DirectoryNodeViewModel dir => (dir.Path, dir.Path),
+			GroupNodeViewModel grp => (grp.WorkingDirectory, $"{grp.WorkingDirectory}|{grp.Name}"),
+			SessionNodeViewModel session => (session.Model.WorkingDirectory, session.Model.WorkingDirectory),
+			_ => (null, null),
+		};
 	}
 
 	public ReactiveCommand<Unit, Unit> AddDirectoryCommand { get; }

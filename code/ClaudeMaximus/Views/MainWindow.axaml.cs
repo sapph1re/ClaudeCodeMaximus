@@ -276,11 +276,11 @@ public partial class MainWindow : Window
 
 		var sourceDirectories = vm.SessionTree.BuildSourceDirectories();
 		var importTargets = vm.SessionTree.BuildImportTargets();
-		string? initialPath = vm.SessionTree.SelectedSession?.Model.WorkingDirectory;
+		var (initialPath, initialTargetKey) = vm.SessionTree.GetSelectedImportContext();
 
 		var pickerVm = new ImportPickerViewModel(importService, assistService);
 		var alreadyImportedIds = vm.SessionTree.CollectAllClaudeSessionIds();
-		pickerVm.Initialize(sourceDirectories, importTargets, initialPath, null, alreadyImportedIds);
+		pickerVm.Initialize(sourceDirectories, importTargets, initialPath, initialTargetKey, alreadyImportedIds);
 
 		var picker = new ImportPickerWindow { DataContext = pickerVm };
 		await picker.ShowDialog(this);
