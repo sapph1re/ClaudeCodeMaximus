@@ -231,7 +231,20 @@ public partial class MainWindow : Window
 			return;
 
 		if (vm.SessionTree.Directories.Count == 0)
-			return;
+		{
+			// No directories — offer to add one via folder picker
+			var folders = await StorageProvider.OpenFolderPickerAsync(
+				new Avalonia.Platform.Storage.FolderPickerOpenOptions
+				{
+					Title = "Select Working Directory for Import",
+					AllowMultiple = false,
+				});
+
+			if (folders.Count == 0)
+				return;
+
+			vm.SessionTree.AddDirectory(folders[0].Path.LocalPath);
+		}
 
 		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
 		var assistService = App.Services.GetRequiredService<IClaudeAssistService>();
