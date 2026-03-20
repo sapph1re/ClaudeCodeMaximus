@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using Avalonia;
@@ -7,8 +8,11 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using ClaudeMaximus.Services;
 using ClaudeMaximus.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
 using ReactiveUI;
+using Serilog;
 
 namespace ClaudeMaximus.Views;
 
@@ -169,6 +173,7 @@ public partial class SessionTreeView : UserControl
 
 		_suppressSelectionSync = true;
 		vm.SelectedSession = selected is SessionNodeViewModel session ? session : null;
+		vm.SelectedTreeItem = selected as ViewModelBase;
 		_suppressSelectionSync = false;
 	}
 
@@ -566,12 +571,20 @@ public partial class SessionTreeView : UserControl
 				await AddSessionToDirectoryAsync(vm, dir, ownerWindow);
 				break;
 
+			case "ImportToDirectory" when ownerVm is DirectoryNodeViewModel dir:
+				await ImportToDirectoryAsync(vm, dir, ownerWindow);
+				break;
+
 			case "AddGroupToGroup" when ownerVm is GroupNodeViewModel grp:
 				await AddGroupToGroupAsync(vm, grp, ownerWindow);
 				break;
 
 			case "AddSessionToGroup" when ownerVm is GroupNodeViewModel grp:
 				await AddSessionToGroupAsync(vm, grp, ownerWindow);
+				break;
+
+			case "ImportToGroup" when ownerVm is GroupNodeViewModel grp:
+				await ImportToGroupAsync(vm, grp, ownerWindow);
 				break;
 
 			case "RenameGroup" when ownerVm is GroupNodeViewModel grp:
@@ -700,40 +713,167 @@ public partial class SessionTreeView : UserControl
 		return false;
 	}
 
-	private void DeleteSessionFromTree(SessionTreeViewModel vm, SessionNodeViewModel session)
+	private async void DeleteSessionFromTree(SessionTreeViewModel vm, SessionNodeViewModel session)
 	{
+		var fileService = App.Services.GetRequiredService<ISessionFileService>();
+		var fileExists = fileService.SessionFileExists(session.FileName);
+
+		if (fileExists)
+		{
+			// Session file exists — confirm deletion with user
+			var ownerWindow = TopLevel.GetTopLevel(this) as MainWindow;
+			if (ownerWindow == null)
+				return;
+
+			var confirmed = await ownerWindow.ShowConfirmOverlayAsync(
+				$"Delete session \"{session.Name}\"?\n\nThis removes the session from Maximus and deletes its local file. The original Claude Code session is not affected.",
+				"Delete");
+
+			if (!confirmed)
+				return;
+		}
+
+		// Try with forceDelete when file exists
 		foreach (var dir in vm.Directories)
 		{
-			if (TryDeleteSessionFromParent(vm, dir, session))
+			if (TryDeleteSessionFromParent(vm, dir, session, fileExists))
 				return;
 		}
 	}
 
 	private static bool TryDeleteSessionFromParent(
-		SessionTreeViewModel vm, DirectoryNodeViewModel dir, SessionNodeViewModel target)
+		SessionTreeViewModel vm, DirectoryNodeViewModel dir, SessionNodeViewModel target, bool forceDelete = false)
 	{
 		foreach (var child in dir.Children)
 		{
 			if (child == target)
-				return vm.TryDeleteSession(dir, target);
+				return vm.TryDeleteSession(dir, target, forceDelete);
 
-			if (child is GroupNodeViewModel grp && TryDeleteSessionFromGroup(vm, grp, target))
+			if (child is GroupNodeViewModel grp && TryDeleteSessionFromGroup(vm, grp, target, forceDelete))
 				return true;
 		}
 		return false;
 	}
 
 	private static bool TryDeleteSessionFromGroup(
-		SessionTreeViewModel vm, GroupNodeViewModel parent, SessionNodeViewModel target)
+		SessionTreeViewModel vm, GroupNodeViewModel parent, SessionNodeViewModel target, bool forceDelete = false)
 	{
 		foreach (var child in parent.Children)
 		{
 			if (child == target)
-				return vm.TryDeleteSessionFromGroup(parent, target);
+				return vm.TryDeleteSessionFromGroup(parent, target, forceDelete);
 
-			if (child is GroupNodeViewModel grp && TryDeleteSessionFromGroup(vm, grp, target))
+			if (child is GroupNodeViewModel grp && TryDeleteSessionFromGroup(vm, grp, target, forceDelete))
 				return true;
 		}
 		return false;
+	}
+
+	// ── Session import ──────────────────────────────────────────────────────
+
+	private static async Task ImportToDirectoryAsync(
+		SessionTreeViewModel vm, DirectoryNodeViewModel dir, Window? ownerWindow)
+	{
+		var result = await ShowImportPickerAsync(dir.Path, dir.Path, vm, ownerWindow);
+		if (result == null)
+			return;
+
+		var fileService = App.Services.GetRequiredService<ISessionFileService>();
+		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
+		var (dirTarget, grpTarget) = vm.FindTargetByKey(result.Value.TargetKey);
+
+		foreach (var item in result.Value.Items)
+			ExecuteImport(vm, fileService, importService, item, dirTarget, grpTarget);
+	}
+
+	private static async Task ImportToGroupAsync(
+		SessionTreeViewModel vm, GroupNodeViewModel grp, Window? ownerWindow)
+	{
+		var targetKey = $"{grp.WorkingDirectory}|{grp.Name}";
+		var result = await ShowImportPickerAsync(grp.WorkingDirectory, targetKey, vm, ownerWindow);
+		if (result == null)
+			return;
+
+		var fileService = App.Services.GetRequiredService<ISessionFileService>();
+		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
+		var (dirTarget, grpTarget) = vm.FindTargetByKey(result.Value.TargetKey);
+
+		foreach (var item in result.Value.Items)
+			ExecuteImport(vm, fileService, importService, item, dirTarget, grpTarget);
+	}
+
+	private static async Task<(IReadOnlyList<ImportSessionItemViewModel> Items, string TargetKey)?> ShowImportPickerAsync(
+		string workingDirectory, string initialTargetKey, SessionTreeViewModel vm, Window? ownerWindow)
+	{
+		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
+		var assistService = App.Services.GetRequiredService<IClaudeAssistService>();
+
+		var sourceDirectories = vm.BuildSourceDirectories();
+		var importTargets = vm.BuildImportTargets();
+		var alreadyImportedIds = vm.CollectAllClaudeSessionIds();
+
+		var pickerVm = new ImportPickerViewModel(importService, assistService);
+		pickerVm.Initialize(sourceDirectories, importTargets, workingDirectory, initialTargetKey, alreadyImportedIds);
+
+		var picker = new ImportPickerWindow { DataContext = pickerVm };
+
+		if (ownerWindow != null)
+			await picker.ShowDialog(ownerWindow);
+		else
+			picker.Show();
+
+		if (picker.Result == null || picker.Result.Count == 0 || pickerVm.SelectedImportTarget == null)
+			return null;
+
+		return (picker.Result, pickerVm.SelectedImportTarget.Key);
+	}
+
+	internal static void ExecuteImport(
+		SessionTreeViewModel vm,
+		ISessionFileService fileService,
+		IClaudeSessionImportService importService,
+		ImportSessionItemViewModel item,
+		DirectoryNodeViewModel? dirParent,
+		GroupNodeViewModel? grpParent)
+	{
+		try
+		{
+			// Parse the JSONL file into session entries
+			var entries = importService.ParseJsonlSession(item.Summary.JsonlPath);
+			if (entries.Count == 0)
+				return;
+
+			// Create a new session file
+			var fileName = fileService.CreateSessionFile();
+
+			// Write all parsed entries
+			fileService.WriteSessionFile(fileName, entries);
+
+			// Determine the session name
+			var name = item.Summary.GeneratedTitle
+				?? TruncateForSessionName(item.Summary.FirstUserPrompt)
+				?? "Imported Session";
+
+			// Add to tree
+			if (dirParent != null)
+				vm.ImportSession(dirParent, name, fileName, item.SessionId);
+			else if (grpParent != null)
+				vm.ImportSessionToGroup(grpParent, name, fileName, item.SessionId);
+		}
+		catch (Exception ex)
+		{
+			Log.Warning(ex, "ExecuteImport: failed to import session {SessionId}", item.SessionId);
+		}
+	}
+
+	private static string? TruncateForSessionName(string? prompt)
+	{
+		if (string.IsNullOrWhiteSpace(prompt))
+			return null;
+
+		var firstLine = prompt.Split('\n')[0].Trim();
+		if (firstLine.Length > 60)
+			return firstLine[..57] + "...";
+		return firstLine;
 	}
 }

@@ -25,6 +25,7 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	private readonly IGitOriginService _gitOriginService;
 	private string _searchText = string.Empty;
 	private SessionNodeViewModel? _selectedSession;
+	private ViewModelBase? _selectedTreeItem;
 	private CancellationTokenSource? _searchCts;
 
 	// ── Move mode state ──────────────────────────────────────────────────────
@@ -57,6 +58,27 @@ public sealed class SessionTreeViewModel : ViewModelBase
 	{
 		get => _selectedSession;
 		set => this.RaiseAndSetIfChanged(ref _selectedSession, value);
+	}
+
+	/// <summary>Tracks the last selected tree item (directory, group, or session) for context-aware hotkeys.</summary>
+	public ViewModelBase? SelectedTreeItem
+	{
+		get => _selectedTreeItem;
+		set => this.RaiseAndSetIfChanged(ref _selectedTreeItem, value);
+	}
+
+	/// <summary>
+	/// Resolves the working directory and import target key from the currently selected tree item.
+	/// </summary>
+	public (string? WorkingDirectory, string? TargetKey) GetSelectedImportContext()
+	{
+		return SelectedTreeItem switch
+		{
+			DirectoryNodeViewModel dir => (dir.Path, dir.Path),
+			GroupNodeViewModel grp => (grp.WorkingDirectory, $"{grp.WorkingDirectory}|{grp.Name}"),
+			SessionNodeViewModel session => (session.Model.WorkingDirectory, session.Model.WorkingDirectory),
+			_ => (null, null),
+		};
 	}
 
 	public ReactiveCommand<Unit, Unit> AddDirectoryCommand { get; }
@@ -153,6 +175,165 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		return vm;
 	}
 
+	// --- Import operations ---
+
+	/// <summary>
+	/// Creates a session node from imported data and adds it to the tree.
+	/// Used by session import (FR.13.11).
+	/// </summary>
+	public SessionNodeViewModel ImportSession(
+		DirectoryNodeViewModel parent, string name, string fileName, string claudeSessionId)
+	{
+		var model = new SessionNodeModel
+		{
+			Name = name,
+			FileName = fileName,
+			WorkingDirectory = parent.Path,
+			ClaudeSessionId = claudeSessionId,
+		};
+		var vm = new SessionNodeViewModel(model);
+		parent.AddSession(vm);
+		_appSettings.Save();
+		return vm;
+	}
+
+	/// <summary>
+	/// Creates a session node from imported data and adds it to a group.
+	/// </summary>
+	public SessionNodeViewModel ImportSessionToGroup(
+		GroupNodeViewModel parent, string name, string fileName, string claudeSessionId)
+	{
+		var model = new SessionNodeModel
+		{
+			Name = name,
+			FileName = fileName,
+			WorkingDirectory = parent.WorkingDirectory,
+			ClaudeSessionId = claudeSessionId,
+		};
+		var vm = new SessionNodeViewModel(model);
+		parent.AddSession(vm);
+		_appSettings.Save();
+		return vm;
+	}
+
+	/// <summary>
+	/// Collects all ClaudeSessionId values from the entire tree for duplicate detection.
+	/// </summary>
+	public IReadOnlySet<string> CollectAllClaudeSessionIds()
+	{
+		var ids = new HashSet<string>();
+		foreach (var dir in Directories)
+			CollectIdsFromChildren(dir.Children, ids);
+		return ids;
+	}
+
+	private static void CollectIdsFromChildren(ObservableCollection<ViewModelBase> children, HashSet<string> ids)
+	{
+		foreach (var child in children)
+		{
+			switch (child)
+			{
+				case SessionNodeViewModel session when session.Model.ClaudeSessionId is not null:
+					ids.Add(session.Model.ClaudeSessionId);
+					break;
+				case GroupNodeViewModel group:
+					CollectIdsFromChildren(group.Children, ids);
+					break;
+			}
+		}
+	}
+
+	/// <summary>
+	/// Builds a flat list of all import targets (directories + groups) with hierarchy depth.
+	/// </summary>
+	public IReadOnlyList<ImportTargetModel> BuildImportTargets()
+	{
+		var targets = new List<ImportTargetModel>();
+		foreach (var dir in Directories)
+		{
+			targets.Add(new ImportTargetModel
+			{
+				DisplayName = dir.Label,
+				WorkingDirectory = dir.Path,
+				Depth = 0,
+				IsDirectory = true,
+				Key = dir.Path,
+			});
+			AddGroupTargets(dir.Children, dir.Path, 1, targets);
+		}
+		return targets;
+	}
+
+	/// <summary>
+	/// Builds a list of source directories only (for session discovery).
+	/// </summary>
+	public IReadOnlyList<ImportTargetModel> BuildSourceDirectories()
+	{
+		return Directories.Select(d => new ImportTargetModel
+		{
+			DisplayName = d.Label,
+			WorkingDirectory = d.Path,
+			Depth = 0,
+			IsDirectory = true,
+			Key = d.Path,
+		}).ToList();
+	}
+
+	/// <summary>
+	/// Finds the directory or group node matching an ImportTargetModel key.
+	/// Returns (dirNode, grpNode) — one will be non-null.
+	/// </summary>
+	public (DirectoryNodeViewModel? Dir, GroupNodeViewModel? Grp) FindTargetByKey(string key)
+	{
+		foreach (var dir in Directories)
+		{
+			if (string.Equals(dir.Path, key, StringComparison.OrdinalIgnoreCase))
+				return (dir, null);
+
+			var grp = FindGroupByKey(dir.Children, key);
+			if (grp != null)
+				return (null, grp);
+		}
+		return (null, null);
+	}
+
+	private static void AddGroupTargets(
+		ObservableCollection<ViewModelBase> children, string workingDir, int depth, List<ImportTargetModel> targets)
+	{
+		foreach (var child in children)
+		{
+			if (child is not GroupNodeViewModel grp)
+				continue;
+
+			targets.Add(new ImportTargetModel
+			{
+				DisplayName = grp.Name,
+				WorkingDirectory = workingDir,
+				Depth = depth,
+				IsDirectory = false,
+				Key = $"{workingDir}|{grp.Name}",
+			});
+			AddGroupTargets(grp.Children, workingDir, depth + 1, targets);
+		}
+	}
+
+	private static GroupNodeViewModel? FindGroupByKey(ObservableCollection<ViewModelBase> children, string key)
+	{
+		foreach (var child in children)
+		{
+			if (child is not GroupNodeViewModel grp)
+				continue;
+
+			if (key == $"{grp.WorkingDirectory}|{grp.Name}")
+				return grp;
+
+			var nested = FindGroupByKey(grp.Children, key);
+			if (nested != null)
+				return nested;
+		}
+		return null;
+	}
+
 	// --- Rename operations ---
 
 	public void RenameGroup(GroupNodeViewModel group, string newName)
@@ -202,10 +383,13 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		return true;
 	}
 
-	public bool TryDeleteSession(DirectoryNodeViewModel parent, SessionNodeViewModel session)
+	public bool TryDeleteSession(DirectoryNodeViewModel parent, SessionNodeViewModel session, bool forceDelete = false)
 	{
-		if (_sessionFileService.SessionFileExists(session.FileName))
+		if (!forceDelete && _sessionFileService.SessionFileExists(session.FileName))
 			return false;
+
+		if (forceDelete)
+			_sessionFileService.DeleteSessionFile(session.FileName);
 
 		parent.Children.Remove(session);
 		parent.Model.Sessions.Remove(session.Model);
@@ -213,10 +397,13 @@ public sealed class SessionTreeViewModel : ViewModelBase
 		return true;
 	}
 
-	public bool TryDeleteSessionFromGroup(GroupNodeViewModel parent, SessionNodeViewModel session)
+	public bool TryDeleteSessionFromGroup(GroupNodeViewModel parent, SessionNodeViewModel session, bool forceDelete = false)
 	{
-		if (_sessionFileService.SessionFileExists(session.FileName))
+		if (!forceDelete && _sessionFileService.SessionFileExists(session.FileName))
 			return false;
+
+		if (forceDelete)
+			_sessionFileService.DeleteSessionFile(session.FileName);
 
 		parent.Children.Remove(session);
 		parent.Model.Sessions.Remove(session.Model);

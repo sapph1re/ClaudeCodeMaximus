@@ -1,4 +1,5 @@
 using System;
+using System.Collections.ObjectModel;
 using System.Reactive;
 using ClaudeMaximus.Models;
 using ClaudeMaximus.Services;
@@ -131,6 +132,12 @@ public sealed class SettingsViewModel : ViewModelBase
 
 	public ReactiveCommand<Unit, Unit> SaveCommand { get; }
 
+	/// <summary>
+	/// Key bindings displayed in the settings window.
+	/// Each entry has an action name and its current binding string.
+	/// </summary>
+	public ObservableCollection<KeyBindingEntryViewModel> KeyBindingEntries { get; } = [];
+
 	public SettingsViewModel(IAppSettingsService appSettings)
 	{
 		_appSettings = appSettings;
@@ -154,6 +161,15 @@ public sealed class SettingsViewModel : ViewModelBase
 		_recency60MinBackground = colors.Recency60MinBackground;
 
 		SaveCommand = ReactiveCommand.Create(Save);
+
+		LoadKeyBindings();
+	}
+
+	private void LoadKeyBindings()
+	{
+		KeyBindingEntries.Clear();
+		foreach (var (action, binding) in _appSettings.Settings.KeyBindings.Bindings)
+			KeyBindingEntries.Add(new KeyBindingEntryViewModel(action, binding));
 	}
 
 	private void LoadColorsFromTheme()
@@ -194,6 +210,10 @@ public sealed class SettingsViewModel : ViewModelBase
 		colors.Recency15MinBackground = _recency15MinBackground;
 		colors.Recency30MinBackground = _recency30MinBackground;
 		colors.Recency60MinBackground = _recency60MinBackground;
+
+		// Save key bindings
+		foreach (var entry in KeyBindingEntries)
+			_appSettings.Settings.KeyBindings.Bindings[entry.ActionName] = entry.Binding;
 
 		ThemeApplicator.Apply(_appSettings.Settings);
 		_appSettings.Save();

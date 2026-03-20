@@ -10,6 +10,7 @@ using Avalonia.VisualTree;
 using ClaudeMaximus.Models;
 using ClaudeMaximus.Services;
 using ClaudeMaximus.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 
 namespace ClaudeMaximus.Views;
@@ -125,9 +126,10 @@ public partial class SessionView : UserControl
 
 		if (e.Key != Key.Enter) return;
 
-		if (e.KeyModifiers == KeyModifiers.Control)
+		var keyService = App.Services.GetRequiredService<IKeyBindingService>();
+		if (keyService.Matches(Constants.KeyBindings.Send, e))
 		{
-			_log.Debug("Ctrl+Enter pressed — sending message");
+			_log.Debug("Send hotkey pressed — sending message");
 			e.Handled = true;
 			vm.SendCommand.Execute(default)
 				.Subscribe(new System.Reactive.AnonymousObserver<System.Reactive.Unit>(_ => { }, _ => { }, () => { }));

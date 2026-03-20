@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -115,6 +116,86 @@ public sealed class ClaudeProcessManager : IClaudeProcessManager
 				_activeProcesses.TryRemove(process.Id, out _);
 			}
 		}
+	}
+
+	public async Task<string?> RunPrintModeAsync(
+		string claudePath,
+		string prompt,
+		string? model = null,
+		int timeoutMs = 60000,
+		CancellationToken cancellationToken = default)
+	{
+		var args = BuildPrintModeArguments(model);
+		_log.Debug("RunPrintModeAsync: spawning claude. Path={ClaudePath} Args={Args}", claudePath, args);
+
+		Process? process = TryStartProcess(claudePath, args, Directory.GetCurrentDirectory());
+
+		// Windows .cmd retry
+		if (process == null && OperatingSystem.IsWindows())
+		{
+			var cmdArgs = $"/c \"{claudePath}\" {args}";
+			_log.Debug("RunPrintModeAsync: retrying via cmd.exe /c. Args={CmdArgs}", cmdArgs);
+			process = TryStartProcess("cmd.exe", cmdArgs, Directory.GetCurrentDirectory());
+		}
+
+		if (process == null)
+		{
+			_log.Error("RunPrintModeAsync: failed to start claude. Path={ClaudePath}", claudePath);
+			return null;
+		}
+
+		_log.Debug("RunPrintModeAsync: process started PID={Pid}", process.Id);
+		_activeProcesses.TryAdd(process.Id, process);
+
+		using (process)
+		{
+			try
+			{
+				await process.StandardInput.WriteLineAsync(prompt);
+				process.StandardInput.Close();
+
+				using var timeoutCts = new CancellationTokenSource(timeoutMs);
+				using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+					cancellationToken, timeoutCts.Token);
+
+				var stdout = await process.StandardOutput.ReadToEndAsync(linkedCts.Token);
+				await process.WaitForExitAsync(linkedCts.Token);
+
+				var stderr = await process.StandardError.ReadToEndAsync(linkedCts.Token);
+				if (!string.IsNullOrWhiteSpace(stderr))
+					_log.Warning("RunPrintModeAsync: stderr: {Stderr}", stderr.Trim());
+
+				if (process.ExitCode != 0)
+				{
+					_log.Warning("RunPrintModeAsync: exit code {ExitCode}. stderr={Stderr}",
+						process.ExitCode, stderr.Trim());
+					return null;
+				}
+
+				return stdout;
+			}
+			catch (OperationCanceledException)
+			{
+				_log.Warning("RunPrintModeAsync: timed out or cancelled");
+				try { process.Kill(entireProcessTree: true); }
+				catch { /* best effort */ }
+				return null;
+			}
+			finally
+			{
+				_activeProcesses.TryRemove(process.Id, out _);
+			}
+		}
+	}
+
+	private static string BuildPrintModeArguments(string? model)
+	{
+		// -p for print mode, --tools "" to disable tools, --no-session-persistence to avoid creating sessions,
+		// --output-format json for structured output, --dangerously-skip-permissions for headless operation.
+		var args = "-p --tools \"\" --no-session-persistence --output-format json --dangerously-skip-permissions";
+		if (!string.IsNullOrEmpty(model))
+			args += $" --model {model}";
+		return args;
 	}
 
 	private static string BuildArguments(string? sessionId, string? model = null)

@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Reactive;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using ClaudeMaximus.Models;
@@ -14,7 +16,7 @@ using Serilog;
 namespace ClaudeMaximus.ViewModels;
 
 /// <remarks>Created by Claude</remarks>
-public sealed class SessionViewModel : ViewModelBase
+public sealed class SessionViewModel : ViewModelBase, IDisposable
 {
 	private static readonly ILogger _log = Log.ForContext<SessionViewModel>();
 
@@ -25,6 +27,7 @@ public sealed class SessionViewModel : ViewModelBase
 	private readonly IDraftService _draftService;
 	private readonly ICodeIndexService _codeIndexService;
 	private readonly IClaudeProfileService _profileService;
+	private readonly IClaudeSessionImportService _importService;
 	private string _name;
 	private string _inputText = string.Empty;
 	private bool _isBusy;
@@ -41,6 +44,11 @@ public sealed class SessionViewModel : ViewModelBase
 	private DispatcherTimer? _draftDebounceTimer;
 	private bool _isCommandBarVisible;
 	private int _selectedModelIndex;
+	private FileSystemWatcher? _fileWatcher;
+	private FileSystemWatcher? _jsonlWatcher;
+	private Timer? _fileChangeDebounceTimer;
+	private Timer? _jsonlChangeDebounceTimer;
+	private int _lastKnownEntryCount;
 	private int _selectedProfileIndex;
 	private bool _isProfileAuthInProgress;
 
@@ -66,6 +74,9 @@ public sealed class SessionViewModel : ViewModelBase
 		get => _isBusy;
 		private set => this.RaiseAndSetIfChanged(ref _isBusy, value);
 	}
+
+	/// <summary>True when this session is being actively used in an external terminal.</summary>
+	public bool IsExternallyActive => _node.IsExternallyActive;
 
 	public string ThinkingDuration
 	{
@@ -294,7 +305,8 @@ public sealed class SessionViewModel : ViewModelBase
 		IAppSettingsService appSettings,
 		IDraftService draftService,
 		ICodeIndexService codeIndexService,
-		IClaudeProfileService profileService)
+		IClaudeProfileService profileService,
+		IClaudeSessionImportService importService)
 	{
 		_node             = node;
 		_fileService      = fileService;
@@ -303,6 +315,7 @@ public sealed class SessionViewModel : ViewModelBase
 		_draftService     = draftService;
 		_codeIndexService = codeIndexService;
 		_profileService   = profileService;
+		_importService    = importService;
 		_name             = node.Name;
 		_selectedModelIndex = Math.Clamp(appSettings.Settings.SelectedModelIndex, 0, ModelIds.Length - 1);
 		AutocompleteVm    = new AutocompleteViewModel(codeIndexService);
@@ -312,6 +325,7 @@ public sealed class SessionViewModel : ViewModelBase
 		_selectedProfileIndex = Math.Clamp(appSettings.Settings.SelectedProfileIndex, 0, Math.Max(0, AvailableProfiles.Count - 2));
 
 		node.WhenAnyValue(x => x.Name).Subscribe(n => Name = n);
+		node.WhenAnyValue(x => x.IsExternallyActive).Subscribe(_ => this.RaisePropertyChanged(nameof(IsExternallyActive)));
 
 		SendCommand           = ReactiveCommand.Create(() => { _ = SendAsync(); });
 		ToggleMarkdownCommand = ReactiveCommand.Create(() => { IsMarkdownMode = !IsMarkdownMode; });
@@ -339,6 +353,319 @@ public sealed class SessionViewModel : ViewModelBase
 		{
 			_inputText = draft;
 			_node.HasDraftText = !string.IsNullOrWhiteSpace(draft);
+		}
+
+		// Initialize JSONL entry count for the watcher. Must reflect the JSONL's current
+		// state, not the .txt file's, because the JSONL typically has more entries (tool_use, etc.)
+		// and RefreshFromJsonl compares against this to find only truly new entries.
+		_lastKnownEntryCount = InitializeJsonlEntryCount();
+		StartFileWatcher();
+	}
+
+	public void Dispose()
+	{
+		_fileWatcher?.Dispose();
+		_jsonlWatcher?.Dispose();
+		_fileChangeDebounceTimer?.Dispose();
+		_jsonlChangeDebounceTimer?.Dispose();
+	}
+
+	/// <summary>
+	/// Counts the current displayable entries in the JSONL file so the watcher
+	/// can detect only truly new entries. Falls back to Messages.Count if no JSONL exists.
+	/// </summary>
+	private int InitializeJsonlEntryCount()
+	{
+		var sessionId = _node.Model.ClaudeSessionId;
+		if (string.IsNullOrEmpty(sessionId) || string.IsNullOrEmpty(WorkingDirectory))
+			return Messages.Count;
+
+		try
+		{
+			var slug = Constants.ClaudeSessions.BuildProjectSlug(WorkingDirectory);
+			var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+			var jsonlPath = Path.Combine(
+				userProfile,
+				Constants.ClaudeSessions.ClaudeHomeFolderName,
+				Constants.ClaudeSessions.ProjectsFolderName,
+				slug,
+				sessionId + Constants.ClaudeSessions.SessionFileExtension);
+
+			if (!File.Exists(jsonlPath))
+				return Messages.Count;
+
+			var entries = _importService.ParseJsonlSession(jsonlPath);
+			var count = 0;
+			foreach (var entry in entries)
+			{
+				if (entry.Role != Constants.SessionFile.RoleCompaction
+				    && !string.IsNullOrWhiteSpace(entry.Content))
+					count++;
+			}
+
+			_log.Debug("InitializeJsonlEntryCount: {Count} displayable entries in JSONL for session {SessionId}",
+				count, sessionId);
+			return count;
+		}
+		catch (Exception ex)
+		{
+			_log.Debug("InitializeJsonlEntryCount: error reading JSONL: {Error}", ex.Message);
+			return Messages.Count;
+		}
+	}
+
+	private void StartFileWatcher()
+	{
+		// Watch the Maximus .txt session file
+		try
+		{
+			var fullPath = _fileService.GetFullPath(_node.FileName);
+			var directory = Path.GetDirectoryName(fullPath);
+			var fileName = Path.GetFileName(fullPath);
+
+			if (directory != null && Directory.Exists(directory))
+			{
+				_fileWatcher = new FileSystemWatcher(directory, fileName)
+				{
+					NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
+					EnableRaisingEvents = true,
+				};
+				_fileWatcher.Changed += OnSessionFileChanged;
+			}
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "Failed to start .txt file watcher for session {FileName}", _node.FileName);
+		}
+
+		// Watch the Claude Code JSONL file (for sessions running externally)
+		StartJsonlWatcher();
+	}
+
+	private void StartJsonlWatcher()
+	{
+		var sessionId = _node.Model.ClaudeSessionId;
+		if (string.IsNullOrEmpty(sessionId) || string.IsNullOrEmpty(WorkingDirectory))
+			return;
+
+		try
+		{
+			var slug = Constants.ClaudeSessions.BuildProjectSlug(WorkingDirectory);
+			var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+			var jsonlDir = Path.Combine(
+				userProfile,
+				Constants.ClaudeSessions.ClaudeHomeFolderName,
+				Constants.ClaudeSessions.ProjectsFolderName,
+				slug);
+
+			var jsonlFileName = sessionId + Constants.ClaudeSessions.SessionFileExtension;
+			var jsonlPath = Path.Combine(jsonlDir, jsonlFileName);
+
+			if (!Directory.Exists(jsonlDir))
+				return;
+
+			_log.Debug("Starting JSONL watcher for {Path}", jsonlPath);
+
+			_jsonlWatcher = new FileSystemWatcher(jsonlDir, jsonlFileName)
+			{
+				NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
+				EnableRaisingEvents = true,
+			};
+			_jsonlWatcher.Changed += OnJsonlFileChanged;
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "Failed to start JSONL watcher for session {SessionId}", sessionId);
+		}
+	}
+
+	private void OnSessionFileChanged(object sender, FileSystemEventArgs e)
+	{
+		// Ignore changes caused by our own writes (IsBusy covers all write paths)
+		if (IsBusy)
+			return;
+
+		_fileChangeDebounceTimer?.Dispose();
+		_fileChangeDebounceTimer = new Timer(
+			_ => RefreshFromFile(),
+			null,
+			500,
+			Timeout.Infinite);
+	}
+
+	private void OnJsonlFileChanged(object sender, FileSystemEventArgs e)
+	{
+		// Ignore changes when we're actively sending (our own process writes to the JSONL too)
+		if (IsBusy)
+			return;
+
+		// Quick check: read the last line to detect if Claude is actively working
+		DetectExternalActivity(e.FullPath);
+
+		_jsonlChangeDebounceTimer?.Dispose();
+		_jsonlChangeDebounceTimer = new Timer(
+			_ => RefreshFromJsonl(e.FullPath),
+			null,
+			1000,
+			Timeout.Infinite);
+	}
+
+	private void DetectExternalActivity(string jsonlPath)
+	{
+		try
+		{
+			var lastLine = ReadLastLine(jsonlPath);
+			if (lastLine == null)
+				return;
+
+			using var doc = System.Text.Json.JsonDocument.Parse(lastLine);
+			var type = doc.RootElement.TryGetProperty("type", out var typeEl)
+				? typeEl.GetString() : null;
+
+			// progress, assistant (mid-stream), system with task_progress → active
+			// result → done
+			var isActive = type is "progress" or "assistant";
+
+			Dispatcher.UIThread.Post(() => _node.IsExternallyActive = isActive);
+		}
+		catch
+		{
+			// Best effort — don't crash on parse errors
+		}
+	}
+
+	/// <summary>Reads the last non-empty line from a file without loading it all into memory.</summary>
+	private static string? ReadLastLine(string path)
+	{
+		try
+		{
+			using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+			if (stream.Length == 0)
+				return null;
+
+			// Seek backwards from end to find the last newline
+			var pos = stream.Length - 1;
+			// Skip trailing newlines
+			while (pos > 0)
+			{
+				stream.Position = pos;
+				var b = stream.ReadByte();
+				if (b != '\n' && b != '\r')
+					break;
+				pos--;
+			}
+
+			// Find the start of the last line
+			while (pos > 0)
+			{
+				stream.Position = pos - 1;
+				var b = stream.ReadByte();
+				if (b == '\n')
+					break;
+				pos--;
+			}
+
+			stream.Position = pos;
+			using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
+			return reader.ReadLine();
+		}
+		catch
+		{
+			return null;
+		}
+	}
+
+	private void RefreshFromFile()
+	{
+		try
+		{
+			var entries = _fileService.ReadEntries(_node.FileName);
+			var currentCount = 0;
+
+			// Count non-empty entries to compare with current Messages
+			var newEntries = new List<SessionEntryModel>();
+			foreach (var entry in entries)
+			{
+				if (entry.Role != Constants.SessionFile.RoleCompaction
+				    && string.IsNullOrWhiteSpace(entry.Content))
+					continue;
+
+				currentCount++;
+				if (currentCount > Messages.Count)
+					newEntries.Add(entry);
+			}
+
+			if (newEntries.Count == 0)
+				return;
+
+			_log.Information("FileWatcher: {Count} new entries detected in {FileName}",
+				newEntries.Count, _node.FileName);
+
+			Dispatcher.UIThread.Post(() =>
+			{
+				foreach (var entry in newEntries)
+					Messages.Add(EntryToViewModel(entry));
+
+				// Update last prompt time if new entries include a user message
+				var lastUser = newEntries.LastOrDefault(e => e.Role == Constants.SessionFile.RoleUser);
+				if (lastUser != null)
+				{
+					_node.LastPromptTimestamp = lastUser.Timestamp;
+					_node.LastPromptTime = lastUser.Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
+				}
+			});
+		}
+		catch (Exception ex)
+		{
+			_log.Debug("FileWatcher: error reading {FileName}: {Error}", _node.FileName, ex.Message);
+		}
+	}
+
+	private void RefreshFromJsonl(string jsonlPath)
+	{
+		try
+		{
+			// Parse the full JSONL and find entries beyond what we already have
+			var allEntries = _importService.ParseJsonlSession(jsonlPath);
+
+			// Filter to displayable entries (same logic as LoadFromFile)
+			var displayable = new List<SessionEntryModel>();
+			foreach (var entry in allEntries)
+			{
+				if (entry.Role != Constants.SessionFile.RoleCompaction
+				    && string.IsNullOrWhiteSpace(entry.Content))
+					continue;
+				displayable.Add(entry);
+			}
+
+			if (displayable.Count <= _lastKnownEntryCount)
+				return;
+
+			var newEntries = displayable.Skip(_lastKnownEntryCount).ToList();
+			_log.Information("JSONL watcher: {Count} new entries detected from JSONL", newEntries.Count);
+
+			// Append new entries to the Maximus .txt file for persistence
+			foreach (var entry in newEntries)
+				_fileService.AppendMessage(_node.FileName, entry.Role, entry.Content);
+
+			_lastKnownEntryCount = displayable.Count;
+
+			Dispatcher.UIThread.Post(() =>
+			{
+				foreach (var entry in newEntries)
+					Messages.Add(EntryToViewModel(entry));
+
+				var lastUser = newEntries.LastOrDefault(e => e.Role == Constants.SessionFile.RoleUser);
+				if (lastUser != null)
+				{
+					_node.LastPromptTimestamp = lastUser.Timestamp;
+					_node.LastPromptTime = lastUser.Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
+				}
+			});
+		}
+		catch (Exception ex)
+		{
+			_log.Debug("JSONL watcher: error reading {Path}: {Error}", jsonlPath, ex.Message);
 		}
 	}
 
@@ -480,6 +807,10 @@ public sealed class SessionViewModel : ViewModelBase
 			_busyCount = Math.Max(0, _busyCount - 1);
 			if (_busyCount == 0)
 			{
+				// Update JSONL entry count before IsBusy goes false, so the watcher
+				// doesn't re-detect entries we already processed during this send cycle.
+				_lastKnownEntryCount = InitializeJsonlEntryCount();
+
 				var t = _thinkingTimer;
 				_thinkingTimer = null;
 				t?.Stop();

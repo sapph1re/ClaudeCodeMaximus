@@ -51,11 +51,41 @@ public sealed class SessionFileService : ISessionFileService
 	public bool SessionFileExists(string fileName)
 		=> File.Exists(GetFullPath(fileName));
 
+	public void DeleteSessionFile(string fileName)
+	{
+		var fullPath = GetFullPath(fileName);
+		if (File.Exists(fullPath))
+			File.Delete(fullPath);
+	}
+
 	public void RewriteSessionFile(string fileName, string content)
 	{
 		var fullPath = GetFullPath(fileName);
 		var tmpPath = fullPath + ".tmp";
 		File.WriteAllText(tmpPath, content, Encoding.UTF8);
+		File.Move(tmpPath, fullPath, overwrite: true);
+	}
+
+	public void WriteSessionFile(string fileName, IReadOnlyList<SessionEntryModel> entries)
+	{
+		var sb = new StringBuilder();
+		foreach (var entry in entries)
+		{
+			if (entry.IsCompaction)
+			{
+				sb.AppendLine(FormatHeader(entry.Timestamp, Constants.SessionFile.RoleCompaction));
+			}
+			else
+			{
+				sb.AppendLine(FormatHeader(entry.Timestamp, entry.Role));
+				sb.AppendLine(entry.Content);
+				sb.AppendLine();
+			}
+		}
+
+		var fullPath = GetFullPath(fileName);
+		var tmpPath = fullPath + ".tmp";
+		File.WriteAllText(tmpPath, sb.ToString(), Encoding.UTF8);
 		File.Move(tmpPath, fullPath, overwrite: true);
 	}
 
@@ -103,7 +133,7 @@ public sealed class SessionFileService : ISessionFileService
 		return repaired;
 	}
 
-	private string GetFullPath(string fileName)
+	public string GetFullPath(string fileName)
 		=> Path.Combine(_appSettings.Settings.SessionFilesRoot, fileName);
 
 	private void AppendToFile(string fileName, string text)

@@ -13,6 +13,7 @@ public sealed class SessionNodeViewModel : ViewModelBase
 	private string _name;
 	private bool _isRunning;
 	private bool _isResumable;
+	private bool _isExternallyActive;
 	private bool _isVisible = true;
 	private bool _isBeingMoved;
 	private bool _hasDraftText;
@@ -46,6 +47,13 @@ public sealed class SessionNodeViewModel : ViewModelBase
 	{
 		get => _isResumable;
 		set => this.RaiseAndSetIfChanged(ref _isResumable, value);
+	}
+
+	/// <summary>True when this session is being actively used in an external terminal (Claude is thinking/responding).</summary>
+	public bool IsExternallyActive
+	{
+		get => _isExternallyActive;
+		set => this.RaiseAndSetIfChanged(ref _isExternallyActive, value);
 	}
 
 	/// <summary>True when the session's input text area contains text (a draft).</summary>

@@ -1,7 +1,10 @@
 using System.Threading.Tasks;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
+using ClaudeMaximus.Services;
 using ClaudeMaximus.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ClaudeMaximus.Views;
 
@@ -11,6 +14,17 @@ public partial class SettingsWindow : Window
 	public SettingsWindow()
 	{
 		InitializeComponent();
+		KeyDown += OnWindowKeyDown;
+	}
+
+	private void OnWindowKeyDown(object? sender, KeyEventArgs e)
+	{
+		var keyService = App.Services.GetRequiredService<IKeyBindingService>();
+		if (keyService.Matches(Constants.KeyBindings.CloseDialog, e))
+		{
+			e.Handled = true;
+			Close();
+		}
 	}
 
 	private async void OnBrowseSessionRootClicked(object? sender, RoutedEventArgs e)

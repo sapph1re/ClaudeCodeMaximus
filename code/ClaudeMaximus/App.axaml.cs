@@ -31,6 +31,9 @@ public partial class App : Application
 		var appSettings = Services.GetRequiredService<IAppSettingsService>();
 		appSettings.Load();
 
+		var keyBindings = Services.GetRequiredService<IKeyBindingService>();
+		keyBindings.EnsureDefaults();
+
 		ThemeApplicator.Apply(appSettings.Settings);
 
 		var selfUpdate = Services.GetRequiredService<ISelfUpdateService>();
@@ -82,6 +85,9 @@ public partial class App : Application
 		services.AddSingleton<ISessionSearchService, SessionSearchService>();
 		services.AddSingleton<IGitOriginService, GitOriginService>();
 		services.AddSingleton<ICodeIndexService, CodeIndexService>();
+		services.AddSingleton<IClaudeSessionImportService, ClaudeSessionImportService>();
+		services.AddSingleton<IClaudeAssistService, ClaudeAssistService>();
+		services.AddSingleton<IKeyBindingService, KeyBindingService>();
 		services.AddSingleton<IClaudeProfileService, ClaudeProfileService>();
 		services.AddSingleton<SessionTreeViewModel>();
 		services.AddSingleton<MainWindowViewModel>();

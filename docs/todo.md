@@ -272,6 +272,48 @@
 
 ---
 
+## Phase 11 — Session Import (FR.13)
+
+### P11.1 JSONL Discovery & Parsing Service (FR.13.2, FR.13.3, FR.13.7) ✓
+- [DONE] `ClaudeSessionSummaryModel` model (SessionId, JsonlPath, Created, LastUsed, MessageCount, FirstUserPrompt, GeneratedTitle)
+- [DONE] `IClaudeSessionImportService` / `ClaudeSessionImportService`
+- [DONE] `DiscoverSessions(workingDirectory)` — derive slug, scan `~/.claude/projects/<slug>/` for `.jsonl` files, extract metadata
+- [DONE] `ParseJsonlSession(jsonlPath)` — line-by-line streaming parse, per-line try/catch, FileShare.ReadWrite
+- [DONE] Handle user events (string content), assistant events (text blocks + tool_use summaries), skip all other types
+- [DONE] Extract `BuildProjectSlug` to `Constants.ClaudeSessions` (shared with `ClaudeSessionStatusService`)
+- [DONE] Unit tests: parse happy path, corrupt lines, thinking blocks, non-conversation events, empty file, timestamps, tool_use with/without description, user content as array, slug building (12 tests)
+
+### P11.2 Claude Assist Service (FR.13.8, FR.13.9, FR.13.14) ✓
+- [DONE] `IClaudeAssistService` / `ClaudeAssistService`
+- [DONE] Add `RunPrintModeAsync` to `IClaudeProcessManager` — shared infrastructure for non-interactive `claude -p` calls with timeout and stderr handling
+- [DONE] `GenerateTitlesAsync(summaries)` — batch up to 20 per call, explicit ID→title JSON mapping in prompt
+- [DONE] `SearchSessionsAsync(summaries, query)` — semantic search, returns ranked session IDs
+- [DONE] Model fallback order: haiku → user's selected model → CLI default (FR.13.14)
+- [DONE] Fallback: local substring match when CLI unavailable (handled in ImportPickerViewModel)
+- [DONE] Unit tests: title response parsing, search response parsing, model fallback logic (15 tests)
+
+### P11.3 Import Picker UI (FR.13.4, FR.13.5, FR.13.6) ✓
+- [DONE] Import picker dialog (ImportPickerWindow) — scrollable session list with checkboxes
+- [DONE] Display: title (progressive via Claude), date range, message count, already-imported indicator
+- [DONE] Search box with Enter-to-search, spinner during async operations
+- [DONE] Multi-select with "Import Selected" button
+- [DONE] Empty state when no sessions found (FR.13.13)
+- [DONE] Already-imported sessions greyed out and not selectable
+- [DONE] Empty JSONL sessions greyed out and not selectable (FR.13.13)
+- [DONE] Safe DateTimeOffset handling for empty sessions (codex review fix)
+- [DONE] Search result deduplication and validation (codex review fix)
+
+### P11.4 Tree Integration & Import Execution (FR.13.1, FR.13.10, FR.13.11, FR.13.12) ✓
+- [DONE] Context menu "Import Claude Session" on Directory and Group nodes
+- [DONE] `SessionTreeViewModel.ImportSession()` / `ImportSessionToGroup()` — accepts pre-populated file + ClaudeSessionId
+- [DONE] `ISessionFileService.WriteSessionFile(fileName, entries)` — write complete session from parsed entries
+- [DONE] Duplicate detection: `CollectAllClaudeSessionIds()` collects all values from tree before showing picker
+- [DONE] Import creates session file, session node, saves appsettings.json
+- [DONE] Error handling: try/catch around I/O in ExecuteImport (codex review fix)
+- [DONE] Resumability preserved: original ClaudeSessionId stored on imported session node (FR.13.12)
+
+---
+
 ## Backlog / Future
 
 - [ ] **P2.3 Search unit tests** — match / no-match / ancestor expansion

@@ -60,6 +60,7 @@
                             <ContextMenu>
                                 <MenuItem Header="Add Group"   Tag="AddGroupToDirectory"   Click="OnContextMenuClicked"/>
                                 <MenuItem Header="Add Session" Tag="AddSessionToDirectory" Click="OnContextMenuClicked"/>
+                                <MenuItem Header="Import Claude Session" Tag="ImportToDirectory" Click="OnContextMenuClicked"/>
                                 <Separator/>
                                 <MenuItem Header="Delete"      Tag="DeleteDirectory"        Click="OnContextMenuClicked"/>
                             </ContextMenu>
@@ -81,6 +82,7 @@
                             <ContextMenu>
                                 <MenuItem Header="Add Group"   Tag="AddGroupToGroup"   Click="OnContextMenuClicked"/>
                                 <MenuItem Header="Add Session" Tag="AddSessionToGroup" Click="OnContextMenuClicked"/>
+                                <MenuItem Header="Import Claude Session" Tag="ImportToGroup" Click="OnContextMenuClicked"/>
                                 <Separator/>
                                 <MenuItem Header="Rename"      Tag="RenameGroup"       Click="OnContextMenuClicked"/>
                                 <MenuItem Header="Delete"      Tag="DeleteGroup"        Click="OnContextMenuClicked"/>
@@ -118,6 +120,9 @@
                                              IsVisible="{Binding IsResumable}"/>
                                     <Ellipse Width="8" Height="8" Fill="LimeGreen"
                                              IsVisible="{Binding IsRunning}"/>
+                                    <Ellipse Width="8" Height="8" Fill="Orange" Opacity="0.8"
+                                             IsVisible="{Binding IsExternallyActive}"
+                                             ToolTip.Tip="Active in external terminal"/>
                                 </Panel>
                                 <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
                                            Foreground="{Binding MoveForeground}"/>

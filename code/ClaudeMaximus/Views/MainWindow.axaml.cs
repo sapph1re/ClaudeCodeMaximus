@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 using Avalonia;
@@ -31,6 +33,8 @@ public partial class MainWindow : Window
 		InitializeComponent();
 		BuildNumberText.Text = GetBuildNumber();
 
+		// Global hotkey handler
+		KeyDown += OnGlobalKeyDown;
 		// On macOS, SystemDecorations="BorderOnly" (set in AXAML) does not provide
 		// native resize handles. Switch to Full decorations with the client area
 		// extended into the title bar so the custom title bar still renders, while
@@ -208,6 +212,102 @@ public partial class MainWindow : Window
 		var sessionView = this.FindDescendantOfType<SessionView>();
 		if (sessionView?.DataContext is SessionViewModel vm)
 			vm.ScrollOffset = sessionView.FindDescendantOfType<ScrollViewer>()?.Offset.Y ?? 0;
+	}
+
+	// ── Global hotkeys ───────────────────────────────────────────────────────
+
+	private void OnGlobalKeyDown(object? sender, KeyEventArgs e)
+	{
+		var keyService = App.Services.GetRequiredService<IKeyBindingService>();
+
+		if (keyService.Matches(Constants.KeyBindings.ImportSessions, e))
+		{
+			e.Handled = true;
+			_ = HandleImportSessionsHotkey();
+			return;
+		}
+
+		if (keyService.Matches(Constants.KeyBindings.AddDirectory, e))
+		{
+			e.Handled = true;
+			_ = HandleAddDirectoryHotkey();
+			return;
+		}
+
+		if (keyService.Matches(Constants.KeyBindings.OpenSettings, e))
+		{
+			e.Handled = true;
+			if (DataContext is MainWindowViewModel vm)
+				vm.OpenSettingsCommand.Execute().Subscribe();
+			return;
+		}
+	}
+
+	private async Task HandleAddDirectoryHotkey()
+	{
+		if (DataContext is not MainWindowViewModel vm)
+			return;
+
+		var folders = await StorageProvider.OpenFolderPickerAsync(
+			new Avalonia.Platform.Storage.FolderPickerOpenOptions
+			{
+				Title = "Select Working Directory",
+				AllowMultiple = false,
+			});
+
+		if (folders.Count == 0)
+			return;
+
+		vm.SessionTree.AddDirectory(folders[0].Path.LocalPath);
+	}
+
+	private async Task HandleImportSessionsHotkey()
+	{
+		if (DataContext is not MainWindowViewModel vm)
+			return;
+
+		if (vm.SessionTree.Directories.Count == 0)
+		{
+			// No directories — offer to add one via folder picker
+			var folders = await StorageProvider.OpenFolderPickerAsync(
+				new Avalonia.Platform.Storage.FolderPickerOpenOptions
+				{
+					Title = "Select Working Directory for Import",
+					AllowMultiple = false,
+				});
+
+			if (folders.Count == 0)
+				return;
+
+			vm.SessionTree.AddDirectory(folders[0].Path.LocalPath);
+		}
+
+		var importService = App.Services.GetRequiredService<IClaudeSessionImportService>();
+		var assistService = App.Services.GetRequiredService<IClaudeAssistService>();
+
+		var sourceDirectories = vm.SessionTree.BuildSourceDirectories();
+		var importTargets = vm.SessionTree.BuildImportTargets();
+		var (initialPath, initialTargetKey) = vm.SessionTree.GetSelectedImportContext();
+
+		var pickerVm = new ImportPickerViewModel(importService, assistService);
+		var alreadyImportedIds = vm.SessionTree.CollectAllClaudeSessionIds();
+		pickerVm.Initialize(sourceDirectories, importTargets, initialPath, initialTargetKey, alreadyImportedIds);
+
+		var picker = new ImportPickerWindow { DataContext = pickerVm };
+		await picker.ShowDialog(this);
+
+		if (picker.Result == null || picker.Result.Count == 0)
+			return;
+
+		var target = pickerVm.SelectedImportTarget;
+		if (target == null)
+			return;
+
+		var (dirNode, grpNode) = vm.SessionTree.FindTargetByKey(target.Key);
+		var fileService = App.Services.GetRequiredService<ISessionFileService>();
+
+		foreach (var item in picker.Result)
+			SessionTreeView.ExecuteImport(vm.SessionTree, fileService, importService, item, dirNode, grpNode);
 	}
 
 	// ── Overlay: confirm dialog ───────────────────────────────────────────────
