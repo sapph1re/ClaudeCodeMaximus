@@ -10,7 +10,7 @@ RESOURCES="$CONTENTS/Resources"
 PUBLISH_DIR="/tmp/tessyn-desktop-publish"
 
 echo "Building Tessyn Desktop..."
-dotnet publish "$SCRIPT_DIR/code/ClaudeMaximus/ClaudeMaximus.csproj" \
+dotnet publish "$SCRIPT_DIR/code/TessynDesktop/TessynDesktop.csproj" \
     -c Release -r osx-arm64 --self-contained -o "$PUBLISH_DIR"
 
 echo "Creating app bundle at $APP_DIR..."
