@@ -147,20 +147,16 @@ public partial class App : Application
 			var defaultProfile = profiles.Profiles.Find(p => p.IsDefault)
 				?? (profiles.Profiles.Count > 0 ? profiles.Profiles[0] : null);
 
-			if (defaultProfile?.Auth is { LoggedIn: true } auth)
-			{
-				Log.Information("Daemon auth OK: {Email} ({Subscription})", auth.Email, auth.SubscriptionType);
-				var mainVm = Services.GetRequiredService<MainWindowViewModel>();
-				Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-					mainVm.SetAuthStatus(true, auth.Email));
-			}
+			var loggedIn = defaultProfile?.Auth is { LoggedIn: true };
+			var email = defaultProfile?.Auth?.Email;
+
+			if (loggedIn)
+				Log.Information("Daemon auth OK: {Email} ({Subscription})", email, defaultProfile!.Auth!.SubscriptionType);
 			else
-			{
 				Log.Warning("Daemon default profile is not authenticated");
-				var mainVm = Services.GetRequiredService<MainWindowViewModel>();
-				Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-					mainVm.SetAuthStatus(false, null));
-			}
+
+			var mainVm = Services.GetRequiredService<MainWindowViewModel>();
+			Avalonia.Threading.Dispatcher.UIThread.Post(() => mainVm.SetAuthStatus(loggedIn, email));
 		}
 		catch (Exception ex)
 		{
