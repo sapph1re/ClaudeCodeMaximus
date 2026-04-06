@@ -10,7 +10,7 @@ public sealed class TessynRunEvent
 {
     /// <summary>
     /// Event type: "started", "system", "delta", "block_start", "block_stop",
-    /// "message", "completed", "failed", "cancelled", "rate_limit".
+    /// "message", "completed", "failed", "cancelled", "rate_limit", "auth_required".
     /// </summary>
     public required string Type { get; init; }
 

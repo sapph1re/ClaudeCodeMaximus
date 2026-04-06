@@ -123,6 +123,8 @@ Use the original timestamps from the conversation. Each entry starts with a [tim
 		public const int ErrorRunNotFound = -32002;
 		public const int ErrorRunLimitReached = -32003;
 		public const int ErrorClaudeNotAvailable = -32004;
+		public const int ErrorAuthRequired = -32005;
+		public const int ErrorProfileNotFound = -32006;
 	}
 
 	public static class ClaudeSessions

@@ -680,6 +680,22 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				FinishDaemonRun(success: false);
 				break;
 
+			case "auth_required":
+				Dispatcher.UIThread.Post(() =>
+				{
+					for (var i = Messages.Count - 1; i >= 0; i--)
+						if (Messages[i].IsProgress) Messages.RemoveAt(i);
+
+					Messages.Add(new MessageEntryViewModel
+					{
+						Role      = Constants.SessionFile.RoleSystem,
+						Content   = "Not logged in — please run  claude login  in a terminal, or type /login here.",
+						Timestamp = DateTimeOffset.UtcNow,
+					});
+				});
+				FinishDaemonRun(success: false);
+				break;
+
 			case "cancelled":
 				Dispatcher.UIThread.Post(() =>
 				{
@@ -1107,6 +1123,14 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 	private async System.Threading.Tasks.Task SendAsync()
 	{
+		// Intercept /login as a client-side command
+		if (InputText.Trim().Equals("/login", StringComparison.OrdinalIgnoreCase))
+		{
+			InputText = string.Empty;
+			await HandleLoginCommandAsync();
+			return;
+		}
+
 		if (UseDaemon)
 		{
 			await SendViaDaemonAsync();
@@ -1375,6 +1399,98 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 					break;
 			}
 		});
+	}
+
+	private async System.Threading.Tasks.Task HandleLoginCommandAsync()
+	{
+		Messages.Add(new MessageEntryViewModel
+		{
+			Role      = Constants.SessionFile.RoleSystem,
+			Content   = "Launching Claude authentication...",
+			Timestamp = DateTimeOffset.UtcNow,
+		});
+
+		try
+		{
+			var claudePath = _appSettings.Settings.ClaudePath;
+
+			// Determine config dir: use selected profile's dir, or default (~/.claude)
+			var configDir = SelectedProfileConfigDir
+				?? System.IO.Path.Combine(
+					Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+					".claude");
+
+			// Launch visible auth login process
+			await _profileService.LaunchAuthLoginAsync(claudePath, configDir);
+
+			// Re-check auth via daemon if available
+			if (_daemonService != null)
+			{
+				try
+				{
+					var authInfo = await _daemonService.AuthStatusAsync();
+					if (authInfo.LoggedIn)
+					{
+						Dispatcher.UIThread.Post(() =>
+						{
+							Messages.Add(new MessageEntryViewModel
+							{
+								Role      = Constants.SessionFile.RoleSystem,
+								Content   = $"Logged in as {authInfo.Email}",
+								Timestamp = DateTimeOffset.UtcNow,
+							});
+						});
+
+						// Clear the auth warning in main window
+						if (Avalonia.Application.Current?.ApplicationLifetime
+							is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+							&& desktop.MainWindow?.DataContext is MainWindowViewModel mainVm)
+							Dispatcher.UIThread.Post(() => mainVm.SetAuthStatus(true, authInfo.Email));
+					}
+					else
+					{
+						Dispatcher.UIThread.Post(() =>
+						{
+							Messages.Add(new MessageEntryViewModel
+							{
+								Role      = Constants.SessionFile.RoleSystem,
+								Content   = "Authentication was not completed. Try again with /login or run  claude login  in a terminal.",
+								Timestamp = DateTimeOffset.UtcNow,
+							});
+						});
+					}
+				}
+				catch (Exception ex)
+				{
+					_log.Debug(ex, "Failed to verify auth after /login");
+				}
+			}
+			else
+			{
+				Dispatcher.UIThread.Post(() =>
+				{
+					Messages.Add(new MessageEntryViewModel
+					{
+						Role      = Constants.SessionFile.RoleSystem,
+						Content   = "Authentication window closed. If login succeeded, try sending a message.",
+						Timestamp = DateTimeOffset.UtcNow,
+					});
+				});
+			}
+		}
+		catch (Exception ex)
+		{
+			_log.Error(ex, "Failed to launch auth login");
+			Dispatcher.UIThread.Post(() =>
+			{
+				Messages.Add(new MessageEntryViewModel
+				{
+					Role      = Constants.SessionFile.RoleSystem,
+					Content   = $"Failed to launch authentication: {ex.Message}",
+					Timestamp = DateTimeOffset.UtcNow,
+				});
+			});
+		}
 	}
 
 	private void SaveDraft(string text)

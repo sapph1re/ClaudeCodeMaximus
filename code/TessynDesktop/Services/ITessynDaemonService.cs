@@ -127,6 +127,14 @@ public interface ITessynDaemonService : IDisposable
     /// <summary>Get state of a specific run.</summary>
     Task<TessynActiveRun?> RunGetAsync(string runId, CancellationToken cancellationToken = default);
 
+    // --- Authentication & Profiles ---
+
+    /// <summary>List all profiles with optional auth status check.</summary>
+    Task<TessynProfilesListResult> ProfilesListAsync(bool checkAuth = false, CancellationToken cancellationToken = default);
+
+    /// <summary>Check auth status for a specific profile.</summary>
+    Task<TessynProfileAuthInfo> AuthStatusAsync(string? profile = null, CancellationToken cancellationToken = default);
+
     // --- Daemon management ---
 
     /// <summary>Request full reindex from JSONL files.</summary>

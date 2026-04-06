@@ -618,6 +618,25 @@ public sealed class TessynDaemonService : ITessynDaemonService
         }
     }
 
+    // --- Authentication & Profiles ---
+
+    public async Task<TessynProfilesListResult> ProfilesListAsync(bool checkAuth, CancellationToken cancellationToken)
+    {
+        var p = new Dictionary<string, object?>();
+        if (checkAuth) p["checkAuth"] = true;
+
+        var result = await SendRpcAsync<TessynProfilesListResult>("profiles.list", p.Count > 0 ? p : null, cancellationToken);
+        return result;
+    }
+
+    public async Task<TessynProfileAuthInfo> AuthStatusAsync(string? profile, CancellationToken cancellationToken)
+    {
+        var p = new Dictionary<string, object?>();
+        if (profile != null) p["profile"] = profile;
+
+        return await SendRpcAsync<TessynProfileAuthInfo>("auth.status", p.Count > 0 ? p : null, cancellationToken);
+    }
+
     // --- Daemon management ---
 
     public async Task<TessynReindexResult> ReindexAsync(CancellationToken cancellationToken)

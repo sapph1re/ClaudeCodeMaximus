@@ -29,6 +29,9 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private bool _isDarkTheme;
 	private string _daemonStatusText = string.Empty;
 	private string _daemonStatusColor = "Gray";
+	private bool _isAuthWarningVisible;
+	private string _authWarningMessage = string.Empty;
+	private string? _authEmail;
 
 	public SessionTreeViewModel SessionTree { get; }
 
@@ -96,6 +99,37 @@ public sealed class MainWindowViewModel : ViewModelBase
 		DaemonMissingMessage = message;
 		DaemonStatusText = "Not installed";
 		DaemonStatusColor = "Red";
+	}
+
+	/// <summary>Whether the "not logged in" warning banner should be visible.</summary>
+	public bool IsAuthWarningVisible
+	{
+		get => _isAuthWarningVisible;
+		private set => this.RaiseAndSetIfChanged(ref _isAuthWarningVisible, value);
+	}
+
+	/// <summary>Warning message shown when auth check fails.</summary>
+	public string AuthWarningMessage
+	{
+		get => _authWarningMessage;
+		private set => this.RaiseAndSetIfChanged(ref _authWarningMessage, value);
+	}
+
+	/// <summary>Authenticated email address, null if not logged in.</summary>
+	public string? AuthEmail
+	{
+		get => _authEmail;
+		private set => this.RaiseAndSetIfChanged(ref _authEmail, value);
+	}
+
+	/// <summary>Called after daemon auth check. Shows or hides the auth warning.</summary>
+	public void SetAuthStatus(bool loggedIn, string? email)
+	{
+		AuthEmail = email;
+		IsAuthWarningVisible = !loggedIn;
+		AuthWarningMessage = loggedIn
+			? string.Empty
+			: "Not logged in — run  claude login  in a terminal or type /login in the input box.";
 	}
 
 	/// <summary>Status text for the Tessyn daemon indicator in the title bar.</summary>
