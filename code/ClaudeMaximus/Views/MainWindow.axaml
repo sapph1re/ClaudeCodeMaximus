@@ -175,6 +175,14 @@
                            HorizontalAlignment="Center"/>
             </Border>
 
+            <!-- Auth warning banner -->
+            <Border DockPanel.Dock="Top" Padding="12,6" Background="#40FF9800"
+                    IsVisible="{Binding IsAuthWarningVisible}" x:CompileBindings="False">
+                <TextBlock Text="{Binding AuthWarningMessage}"
+                           FontSize="13" TextWrapping="Wrap" Foreground="#FFFFF3E0"
+                           HorizontalAlignment="Center"/>
+            </Border>
+
             <!-- Two-panel layout -->
             <Grid x:Name="MainContentGrid">
                 <Grid.ColumnDefinitions>

@@ -107,10 +107,38 @@ public partial class App : Application
 				await EnsureDaemonRunningAsync(appSettings.Settings.TessynPath);
 
 			await daemon.ConnectAsync();
+
+			// Check auth status after connecting
+			await CheckDaemonAuthAsync(daemon);
 		}
 		catch (Exception ex)
 		{
 			Log.Warning(ex, "Failed to start Tessyn daemon connection (will auto-reconnect)");
+		}
+	}
+
+	private static async Task CheckDaemonAuthAsync(ITessynDaemonService daemon)
+	{
+		try
+		{
+			var profiles = await daemon.ProfilesListAsync(checkAuth: true);
+			var defaultProfile = profiles.Profiles.Find(p => p.IsDefault)
+				?? (profiles.Profiles.Count > 0 ? profiles.Profiles[0] : null);
+
+			var loggedIn = defaultProfile?.Auth is { LoggedIn: true };
+			var email = defaultProfile?.Auth?.Email;
+
+			if (loggedIn)
+				Log.Information("Daemon auth OK: {Email} ({Subscription})", email, defaultProfile!.Auth!.SubscriptionType);
+			else
+				Log.Warning("Daemon default profile is not authenticated");
+
+			var mainVm = Services.GetRequiredService<MainWindowViewModel>();
+			Avalonia.Threading.Dispatcher.UIThread.Post(() => mainVm.SetAuthStatus(loggedIn, email));
+		}
+		catch (Exception ex)
+		{
+			Log.Debug(ex, "Failed to check daemon auth status (daemon may not support profiles.list yet)");
 		}
 	}
 
