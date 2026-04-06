@@ -122,16 +122,37 @@ public partial class App : Application
 		try
 		{
 			var profiles = await daemon.ProfilesListAsync(checkAuth: true);
-			var defaultProfile = profiles.Profiles.Find(p => p.IsDefault)
-				?? (profiles.Profiles.Count > 0 ? profiles.Profiles[0] : null);
 
-			var loggedIn = defaultProfile?.Auth is { LoggedIn: true };
-			var email = defaultProfile?.Auth?.Email;
+			// Try default profile first, then fall back to any authenticated profile
+			var defaultProfile = profiles.Profiles.Find(p => p.IsDefault);
+			var authedProfile = defaultProfile?.Auth is { LoggedIn: true }
+				? defaultProfile
+				: profiles.Profiles.Find(p => p.Auth is { LoggedIn: true });
+
+			var loggedIn = authedProfile?.Auth is { LoggedIn: true };
+			var email = authedProfile?.Auth?.Email;
 
 			if (loggedIn)
-				Log.Information("Daemon auth OK: {Email} ({Subscription})", email, defaultProfile!.Auth!.SubscriptionType);
+			{
+				Log.Information("Daemon auth OK: profile={Profile}, email={Email} ({Subscription})",
+					authedProfile!.Name, email, authedProfile.Auth!.SubscriptionType);
+
+				// Store the profile to use for run.send
+				var appSettings = Services.GetRequiredService<IAppSettingsService>();
+				var profileName = authedProfile.IsDefault ? null : authedProfile.Name;
+				if (appSettings.Settings.DaemonProfile != profileName)
+				{
+					appSettings.Settings.DaemonProfile = profileName;
+					appSettings.Save();
+				}
+
+				if (authedProfile != defaultProfile)
+					Log.Information("Default profile is not authenticated; using profile '{Profile}' instead", authedProfile.Name);
+			}
 			else
-				Log.Warning("Daemon default profile is not authenticated");
+			{
+				Log.Warning("No authenticated daemon profile found");
+			}
 
 			var mainVm = Services.GetRequiredService<MainWindowViewModel>();
 			Avalonia.Threading.Dispatcher.UIThread.Post(() => mainVm.SetAuthStatus(loggedIn, email));

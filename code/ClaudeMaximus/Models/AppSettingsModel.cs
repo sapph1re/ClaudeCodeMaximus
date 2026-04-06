@@ -78,4 +78,10 @@ public sealed class AppSettingsModel
 	/// "auto-approve" = all tools auto-approved (--dangerously-skip-permissions).
 	/// </summary>
 	public string DaemonPermissionMode { get; set; } = "auto-approve";
+
+	/// <summary>
+	/// Daemon profile name to use for run.send. Null = use daemon's default profile.
+	/// Auto-detected on startup if the default profile is not authenticated.
+	/// </summary>
+	public string? DaemonProfile { get; set; }
 }

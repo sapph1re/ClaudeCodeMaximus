@@ -581,7 +581,7 @@ public sealed class TessynDaemonService : ITessynDaemonService
 
     public async Task<string> RunSendAsync(
         string prompt, string projectPath, string? externalId, string? model,
-        string? permissionMode, CancellationToken cancellationToken)
+        string? permissionMode, string? profile, CancellationToken cancellationToken)
     {
         var p = new Dictionary<string, object?>
         {
@@ -591,6 +591,7 @@ public sealed class TessynDaemonService : ITessynDaemonService
         if (externalId != null) p["externalId"] = externalId;
         if (model != null) p["model"] = model;
         if (permissionMode != null) p["permissionMode"] = permissionMode;
+        if (profile != null) p["profile"] = profile;
 
         var result = await SendRpcAsync<JsonElement>("run.send", p, cancellationToken);
         return result.TryGetProperty("runId", out var r)

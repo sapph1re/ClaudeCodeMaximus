@@ -496,7 +496,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				augmentedMessage,
 				_node.ExternalId,
 				SelectedModelId,
-				_appSettings.Settings.DaemonPermissionMode);
+				_appSettings.Settings.DaemonPermissionMode,
+				_appSettings.Settings.DaemonProfile);
 
 			_activeRunId = runId;
 
@@ -778,7 +779,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 								_node.Model.WorkingDirectory,
 								Constants.Instructions.CompactionPrompt,
 								_node.ExternalId,
-								permissionMode: _appSettings.Settings.DaemonPermissionMode);
+								permissionMode: _appSettings.Settings.DaemonPermissionMode,
+								profile: _appSettings.Settings.DaemonProfile);
 						}
 						catch (Exception ex)
 						{
