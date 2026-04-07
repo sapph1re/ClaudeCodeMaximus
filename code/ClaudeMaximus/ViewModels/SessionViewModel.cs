@@ -1405,12 +1405,13 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 	private async System.Threading.Tasks.Task HandleLoginCommandAsync()
 	{
-		Messages.Add(new MessageEntryViewModel
+		var statusMsg = new MessageEntryViewModel
 		{
 			Role      = Constants.SessionFile.RoleSystem,
 			Content   = "Launching Claude authentication...",
 			Timestamp = DateTimeOffset.UtcNow,
-		});
+		};
+		Messages.Add(statusMsg);
 
 		try
 		{
@@ -1431,67 +1432,42 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				try
 				{
 					var authInfo = await _daemonService.AuthStatusAsync();
-					if (authInfo.LoggedIn)
+					Dispatcher.UIThread.Post(() =>
 					{
-						Dispatcher.UIThread.Post(() =>
+						if (authInfo.LoggedIn)
 						{
-							Messages.Add(new MessageEntryViewModel
-							{
-								Role      = Constants.SessionFile.RoleSystem,
-								Content   = $"Logged in as {authInfo.Email}",
-								Timestamp = DateTimeOffset.UtcNow,
-							});
-						});
+							statusMsg.Content = $"Logged in as {authInfo.Email}";
 
-						// Clear the auth warning in main window
-						if (Avalonia.Application.Current?.ApplicationLifetime
-							is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
-							&& desktop.MainWindow?.DataContext is MainWindowViewModel mainVm)
-							Dispatcher.UIThread.Post(() => mainVm.SetAuthStatus(true, authInfo.Email));
-					}
-					else
-					{
-						Dispatcher.UIThread.Post(() =>
+							// Clear the auth warning in main window
+							if (Avalonia.Application.Current?.ApplicationLifetime
+								is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+								&& desktop.MainWindow?.DataContext is MainWindowViewModel mainVm)
+								mainVm.SetAuthStatus(true, authInfo.Email);
+						}
+						else
 						{
-							Messages.Add(new MessageEntryViewModel
-							{
-								Role      = Constants.SessionFile.RoleSystem,
-								Content   = "Authentication was not completed. Try again with /login or run  claude login  in a terminal.",
-								Timestamp = DateTimeOffset.UtcNow,
-							});
-						});
-					}
+							statusMsg.Content = "Authentication was not completed. Try again with /login or run  claude login  in a terminal.";
+						}
+					});
 				}
 				catch (Exception ex)
 				{
 					_log.Debug(ex, "Failed to verify auth after /login");
+					Dispatcher.UIThread.Post(() =>
+						statusMsg.Content = "Authentication window closed. If login succeeded, try sending a message.");
 				}
 			}
 			else
 			{
 				Dispatcher.UIThread.Post(() =>
-				{
-					Messages.Add(new MessageEntryViewModel
-					{
-						Role      = Constants.SessionFile.RoleSystem,
-						Content   = "Authentication window closed. If login succeeded, try sending a message.",
-						Timestamp = DateTimeOffset.UtcNow,
-					});
-				});
+					statusMsg.Content = "Authentication window closed. If login succeeded, try sending a message.");
 			}
 		}
 		catch (Exception ex)
 		{
 			_log.Error(ex, "Failed to launch auth login");
 			Dispatcher.UIThread.Post(() =>
-			{
-				Messages.Add(new MessageEntryViewModel
-				{
-					Role      = Constants.SessionFile.RoleSystem,
-					Content   = $"Failed to launch authentication: {ex.Message}",
-					Timestamp = DateTimeOffset.UtcNow,
-				});
-			});
+				statusMsg.Content = $"Failed to launch authentication: {ex.Message}");
 		}
 	}
 
