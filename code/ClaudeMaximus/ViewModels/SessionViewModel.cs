@@ -234,7 +234,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	}
 
 	/// <summary>Display names for the model selector.</summary>
-	public static string[] AvailableModels { get; } = ["Default", "Opus", "Sonnet", "Haiku"];
+	public static string[] AvailableModels { get; } = ["Sonnet (default)", "Opus", "Sonnet", "Haiku"];
 
 	/// <summary>Model aliases passed to --model flag. Empty string means no flag. CLI resolves aliases to latest version.</summary>
 	private static readonly string[] ModelIds = ["", "opus", "sonnet", "haiku"];
@@ -325,7 +325,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	// --- Reasoning effort ---
 
 	/// <summary>Display names for reasoning effort selector.</summary>
-	public static string[] AvailableEfforts { get; } = ["Default", "Low", "Medium", "High"];
+	public static string[] AvailableEfforts { get; } = ["Medium (default)", "Low", "Medium", "High"];
 
 	private static readonly string[] EffortIds = ["", "low", "medium", "high"];
 

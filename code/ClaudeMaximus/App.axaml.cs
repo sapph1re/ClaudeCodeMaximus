@@ -25,6 +25,10 @@ public partial class App : Application
 
 	public override void OnFrameworkInitializationCompleted()
 	{
+		// On macOS, GUI apps don't inherit the user's shell PATH (nvm, homebrew, etc.).
+		// Resolve it once at startup so tools like tessyn and claude are discoverable.
+		InheritShellPath();
+
 		ConfigureLogging();
 
 		var services = new ServiceCollection();
@@ -160,6 +164,61 @@ public partial class App : Application
 		catch (Exception ex)
 		{
 			Log.Debug(ex, "Failed to check daemon auth status (daemon may not support profiles.list yet)");
+		}
+	}
+
+	/// <summary>
+	/// On macOS (and Linux), GUI apps launched from Finder/dock don't inherit the
+	/// user's shell PATH. This method runs the user's login shell to capture the
+	/// real PATH and merges it into the current process environment.
+	/// Covers nvm, homebrew, fnm, volta, asdf, pyenv, and any other shell-configured tools.
+	/// </summary>
+	private static void InheritShellPath()
+	{
+		if (OperatingSystem.IsWindows())
+			return;
+
+		try
+		{
+			var shell = Environment.GetEnvironmentVariable("SHELL") ?? "/bin/zsh";
+			var psi = new ProcessStartInfo(shell, "-l -c \"echo $PATH\"")
+			{
+				RedirectStandardOutput = true,
+				RedirectStandardError = true,
+				UseShellExecute = false,
+				CreateNoWindow = true,
+			};
+
+			using var proc = Process.Start(psi);
+			if (proc == null) return;
+
+			var shellPath = proc.StandardOutput.ReadToEnd().Trim();
+			proc.WaitForExit(5000);
+
+			if (string.IsNullOrEmpty(shellPath))
+				return;
+
+			// Merge: prepend the shell's PATH entries that aren't already present
+			var currentPath = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+			var currentDirs = new System.Collections.Generic.HashSet<string>(
+				currentPath.Split(':', StringSplitOptions.RemoveEmptyEntries));
+
+			var newEntries = new System.Collections.Generic.List<string>();
+			foreach (var dir in shellPath.Split(':', StringSplitOptions.RemoveEmptyEntries))
+			{
+				if (currentDirs.Add(dir))
+					newEntries.Add(dir);
+			}
+
+			if (newEntries.Count > 0)
+			{
+				var mergedPath = string.Join(":", newEntries) + ":" + currentPath;
+				Environment.SetEnvironmentVariable("PATH", mergedPath);
+			}
+		}
+		catch
+		{
+			// Best effort — don't crash if shell resolution fails
 		}
 	}
 
