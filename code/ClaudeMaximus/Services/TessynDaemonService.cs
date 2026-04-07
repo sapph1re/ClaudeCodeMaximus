@@ -581,7 +581,8 @@ public sealed class TessynDaemonService : ITessynDaemonService
 
     public async Task<string> RunSendAsync(
         string prompt, string projectPath, string? externalId, string? model,
-        string? permissionMode, string? profile, CancellationToken cancellationToken)
+        string? permissionMode, string? profile, string? reasoningEffort,
+        CancellationToken cancellationToken)
     {
         var p = new Dictionary<string, object?>
         {
@@ -592,6 +593,7 @@ public sealed class TessynDaemonService : ITessynDaemonService
         if (model != null) p["model"] = model;
         if (permissionMode != null) p["permissionMode"] = permissionMode;
         if (profile != null) p["profile"] = profile;
+        if (reasoningEffort != null) p["reasoningEffort"] = reasoningEffort;
 
         var result = await SendRpcAsync<JsonElement>("run.send", p, cancellationToken);
         return result.TryGetProperty("runId", out var r)
@@ -617,6 +619,32 @@ public sealed class TessynDaemonService : ITessynDaemonService
         {
             return null;
         }
+    }
+
+    // --- Commands & Skills ---
+
+    public async Task<TessynCommandsListResult> CommandsListAsync(string projectPath, CancellationToken cancellationToken)
+    {
+        return await SendRpcAsync<TessynCommandsListResult>("commands.list",
+            new Dictionary<string, object?> { ["projectPath"] = projectPath }, cancellationToken);
+    }
+
+    public async Task<string> CommandsExecuteAsync(string command, string? args, string? externalId,
+        string projectPath, string? profile, CancellationToken cancellationToken)
+    {
+        var p = new Dictionary<string, object?>
+        {
+            ["command"] = command,
+            ["projectPath"] = projectPath,
+        };
+        if (args != null) p["args"] = args;
+        if (externalId != null) p["externalId"] = externalId;
+        if (profile != null) p["profile"] = profile;
+
+        var result = await SendRpcAsync<JsonElement>("commands.execute", p, cancellationToken);
+        return result.TryGetProperty("runId", out var r)
+            ? r.GetString() ?? throw new InvalidOperationException("commands.execute returned null runId")
+            : throw new InvalidOperationException("commands.execute response missing runId");
     }
 
     // --- Authentication & Profiles ---

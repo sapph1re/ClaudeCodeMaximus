@@ -59,6 +59,12 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private int _lastKnownEntryCount;
 	private int _selectedProfileIndex;
 	private bool _isProfileAuthInProgress;
+	private int _selectedDaemonProfileIndex;
+	private int _selectedEffortIndex;
+	private string _contextUsageText = string.Empty;
+	private string _sessionCostText = string.Empty;
+	private decimal _sessionTotalCost;
+	private List<TessynProfile> _daemonProfiles = [];
 
 	public string Name
 	{
@@ -290,6 +296,65 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		}
 	}
 
+	// --- Daemon profile selector ---
+
+	/// <summary>Display names for the daemon profile dropdown.</summary>
+	public ObservableCollection<string> DaemonProfileNames { get; } = [];
+
+	/// <summary>Selected daemon profile index.</summary>
+	public int SelectedDaemonProfileIndex
+	{
+		get => _selectedDaemonProfileIndex;
+		set
+		{
+			this.RaiseAndSetIfChanged(ref _selectedDaemonProfileIndex, value);
+			var profileName = value >= 0 && value < _daemonProfiles.Count
+				? (_daemonProfiles[value].IsDefault ? null : _daemonProfiles[value].Name)
+				: null;
+			_appSettings.Settings.DaemonProfile = profileName;
+			_appSettings.Save();
+		}
+	}
+
+	/// <summary>Returns the daemon profile name for run.send, or null for default.</summary>
+	public string? SelectedDaemonProfile =>
+		_selectedDaemonProfileIndex >= 0 && _selectedDaemonProfileIndex < _daemonProfiles.Count
+			? (_daemonProfiles[_selectedDaemonProfileIndex].IsDefault ? null : _daemonProfiles[_selectedDaemonProfileIndex].Name)
+			: _appSettings.Settings.DaemonProfile;
+
+	// --- Reasoning effort ---
+
+	/// <summary>Display names for reasoning effort selector.</summary>
+	public static string[] AvailableEfforts { get; } = ["Default", "Low", "Medium", "High"];
+
+	private static readonly string[] EffortIds = ["", "low", "medium", "high"];
+
+	public int SelectedEffortIndex
+	{
+		get => _selectedEffortIndex;
+		set => this.RaiseAndSetIfChanged(ref _selectedEffortIndex, value);
+	}
+
+	/// <summary>Returns the reasoning effort for run.send, or null for default.</summary>
+	public string? SelectedReasoningEffort =>
+		_selectedEffortIndex > 0 && _selectedEffortIndex < EffortIds.Length
+			? EffortIds[_selectedEffortIndex]
+			: null;
+
+	// --- Context and cost display ---
+
+	public string ContextUsageText
+	{
+		get => _contextUsageText;
+		private set => this.RaiseAndSetIfChanged(ref _contextUsageText, value);
+	}
+
+	public string SessionCostText
+	{
+		get => _sessionCostText;
+		private set => this.RaiseAndSetIfChanged(ref _sessionCostText, value);
+	}
+
 	/// <summary>Persisted vertical scroll offset for the message area.</summary>
 	public double ScrollOffset
 	{
@@ -335,6 +400,13 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 		RebuildProfileList();
 		_selectedProfileIndex = Math.Clamp(appSettings.Settings.SelectedProfileIndex, 0, Math.Max(0, AvailableProfiles.Count - 2));
+
+		// Load daemon profiles and commands asynchronously
+		if (_daemonService != null)
+		{
+			_ = LoadDaemonProfilesAsync();
+			_ = LoadCommandsAsync();
+		}
 
 		node.WhenAnyValue(x => x.Name).Subscribe(n => Name = n);
 		node.WhenAnyValue(x => x.IsExternallyActive).Subscribe(_ => this.RaisePropertyChanged(nameof(IsExternallyActive)));
@@ -497,7 +569,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				_node.ExternalId,
 				SelectedModelId,
 				_appSettings.Settings.DaemonPermissionMode,
-				_appSettings.Settings.DaemonProfile);
+				SelectedDaemonProfile,
+				SelectedReasoningEffort);
 
 			_activeRunId = runId;
 
@@ -660,6 +733,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 							Content   = $"[{evt.Usage.InputTokens} in / {evt.Usage.OutputTokens} out, {evt.Usage.DurationMs / 1000.0:F1}s, ${evt.Usage.CostUsd:F4}]",
 							Timestamp = DateTimeOffset.UtcNow,
 						});
+						UpdateSessionCost((decimal)evt.Usage.CostUsd);
+						UpdateContextUsage(evt.Usage.InputTokens);
 					}
 				});
 				FinishDaemonRun(success: true);
@@ -780,7 +855,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 								Constants.Instructions.CompactionPrompt,
 								_node.ExternalId,
 								permissionMode: _appSettings.Settings.DaemonPermissionMode,
-								profile: _appSettings.Settings.DaemonProfile);
+								profile: SelectedDaemonProfile);
 						}
 						catch (Exception ex)
 						{
@@ -1125,11 +1200,20 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 	private async System.Threading.Tasks.Task SendAsync()
 	{
-		// Intercept /login as a client-side command
-		if (InputText.Trim().Equals("/login", StringComparison.OrdinalIgnoreCase))
+		var trimmed = InputText.Trim();
+
+		// Intercept /login as a client-side command (works even without daemon)
+		if (trimmed.Equals("/login", StringComparison.OrdinalIgnoreCase))
 		{
 			InputText = string.Empty;
 			await HandleLoginCommandAsync();
+			return;
+		}
+
+		// Route other slash commands through the daemon
+		if (UseDaemon && trimmed.StartsWith('/') && !trimmed.Contains('\n'))
+		{
+			await ExecuteSlashCommandAsync(trimmed);
 			return;
 		}
 
@@ -1403,6 +1487,96 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		});
 	}
 
+	private async System.Threading.Tasks.Task ExecuteSlashCommandAsync(string input)
+	{
+		// Parse "/command args" format
+		var parts = input.Substring(1).Split(' ', 2);
+		var command = parts[0];
+		var args = parts.Length > 1 ? parts[1] : null;
+
+		InputText = string.Empty;
+
+		var projectPath = _node.Model.OriginalProjectPath ?? _node.Model.WorkingDirectory;
+
+		Messages.Add(new MessageEntryViewModel
+		{
+			Role      = Constants.SessionFile.RoleSystem,
+			Content   = $"/{command}{(args != null ? " " + args : "")}",
+			Timestamp = DateTimeOffset.UtcNow,
+		});
+
+		_busyCount++;
+		IsBusy = true;
+		_node.IsRunning = true;
+
+		if (_thinkingTimer == null)
+		{
+			_thinkingStartedAt = DateTimeOffset.UtcNow;
+			ThinkingDuration = "0:00";
+			_thinkingTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+			_thinkingTimer.Tick += OnThinkingTimerTick;
+			_thinkingTimer.Start();
+		}
+
+		try
+		{
+			_runEventSubscription?.Dispose();
+			var pendingEvents = new List<TessynRunEvent>();
+			_runEventSubscription = _runService!.RunEvents
+				.Subscribe(evt =>
+				{
+					if (_activeRunId != null && evt.RunId == _activeRunId)
+						HandleRunEvent(evt);
+					else if (_activeRunId == null)
+						pendingEvents.Add(evt);
+				});
+
+			var runId = await _daemonService!.CommandsExecuteAsync(
+				command, args, _node.ExternalId, projectPath, SelectedDaemonProfile);
+
+			_activeRunId = runId;
+
+			foreach (var buffered in pendingEvents)
+			{
+				if (buffered.RunId == runId)
+					HandleRunEvent(buffered);
+			}
+			pendingEvents.Clear();
+
+			_runEventSubscription?.Dispose();
+			_runEventSubscription = _runService.RunEvents
+				.Where(e => e.RunId == runId)
+				.Subscribe(HandleRunEvent);
+		}
+		catch (TessynRpcException ex) when (ex.Message.Contains("Unknown command"))
+		{
+			Dispatcher.UIThread.Post(() =>
+			{
+				Messages.Add(new MessageEntryViewModel
+				{
+					Role      = Constants.SessionFile.RoleSystem,
+					Content   = $"Unknown command: /{command}",
+					Timestamp = DateTimeOffset.UtcNow,
+				});
+			});
+			FinishDaemonRun(success: false);
+		}
+		catch (Exception ex)
+		{
+			_log.Error(ex, "Failed to execute command /{Command}", command);
+			Dispatcher.UIThread.Post(() =>
+			{
+				Messages.Add(new MessageEntryViewModel
+				{
+					Role      = Constants.SessionFile.RoleSystem,
+					Content   = $"Command failed: {ex.Message}",
+					Timestamp = DateTimeOffset.UtcNow,
+				});
+			});
+			FinishDaemonRun(success: false);
+		}
+	}
+
 	private async System.Threading.Tasks.Task HandleLoginCommandAsync()
 	{
 		var statusMsg = new MessageEntryViewModel
@@ -1469,6 +1643,73 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			Dispatcher.UIThread.Post(() =>
 				statusMsg.Content = $"Failed to launch authentication: {ex.Message}");
 		}
+	}
+
+	private async System.Threading.Tasks.Task LoadDaemonProfilesAsync()
+	{
+		try
+		{
+			var result = await _daemonService!.ProfilesListAsync(checkAuth: true);
+			_daemonProfiles = result.Profiles;
+
+			Dispatcher.UIThread.Post(() =>
+			{
+				DaemonProfileNames.Clear();
+				var savedProfile = _appSettings.Settings.DaemonProfile;
+				var selectedIdx = 0;
+
+				for (var i = 0; i < _daemonProfiles.Count; i++)
+				{
+					var p = _daemonProfiles[i];
+					var label = p.Auth is { LoggedIn: true }
+						? p.Auth.Email ?? p.Name
+						: $"{p.Name} (not logged in)";
+					DaemonProfileNames.Add(label);
+
+					if (savedProfile != null && p.Name == savedProfile)
+						selectedIdx = i;
+					else if (savedProfile == null && p.IsDefault)
+						selectedIdx = i;
+				}
+
+				_selectedDaemonProfileIndex = selectedIdx;
+				this.RaisePropertyChanged(nameof(SelectedDaemonProfileIndex));
+			});
+		}
+		catch (Exception ex)
+		{
+			_log.Debug(ex, "Failed to load daemon profiles");
+		}
+	}
+
+	private async System.Threading.Tasks.Task LoadCommandsAsync()
+	{
+		try
+		{
+			var workDir = WorkingDirectory;
+			if (string.IsNullOrEmpty(workDir)) return;
+
+			var result = await _daemonService!.CommandsListAsync(workDir);
+			AutocompleteVm.SetCommands(result.Commands);
+			_log.Debug("Loaded {Count} commands for autocomplete", result.Commands.Count);
+		}
+		catch (Exception ex)
+		{
+			_log.Debug(ex, "Failed to load commands from daemon");
+		}
+	}
+
+	private void UpdateSessionCost(decimal cost)
+	{
+		_sessionTotalCost += cost;
+		SessionCostText = $"${_sessionTotalCost:F4}";
+	}
+
+	private void UpdateContextUsage(int inputTokens)
+	{
+		// Rough display — we don't have the exact context limit from the daemon yet
+		if (inputTokens > 0)
+			ContextUsageText = $"ctx: {inputTokens / 1000.0:F0}k";
 	}
 
 	private void SaveDraft(string text)

@@ -117,6 +117,7 @@ public interface ITessynDaemonService : IDisposable
         string? model = null,
         string? permissionMode = null,
         string? profile = null,
+        string? reasoningEffort = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>Cancel an active run via SIGINT.</summary>
@@ -127,6 +128,15 @@ public interface ITessynDaemonService : IDisposable
 
     /// <summary>Get state of a specific run.</summary>
     Task<TessynActiveRun?> RunGetAsync(string runId, CancellationToken cancellationToken = default);
+
+    // --- Commands & Skills ---
+
+    /// <summary>List available slash commands and skills for a project.</summary>
+    Task<TessynCommandsListResult> CommandsListAsync(string projectPath, CancellationToken cancellationToken = default);
+
+    /// <summary>Execute a slash command. Returns a runId for streaming results via run.* events.</summary>
+    Task<string> CommandsExecuteAsync(string command, string? args, string? externalId, string projectPath,
+        string? profile = null, CancellationToken cancellationToken = default);
 
     // --- Authentication & Profiles ---
 

@@ -20,9 +20,10 @@ public sealed class TessynRunService : ITessynRunService
 
     public Task<string> SendAsync(
         string projectPath, string prompt, string? externalId, string? model,
-        string? permissionMode, string? profile, CancellationToken cancellationToken)
+        string? permissionMode, string? profile, string? reasoningEffort,
+        CancellationToken cancellationToken)
     {
-        return _daemon.RunSendAsync(prompt, projectPath, externalId, model, permissionMode, profile, cancellationToken);
+        return _daemon.RunSendAsync(prompt, projectPath, externalId, model, permissionMode, profile, reasoningEffort, cancellationToken);
     }
 
     public Task CancelAsync(string runId, CancellationToken cancellationToken)
