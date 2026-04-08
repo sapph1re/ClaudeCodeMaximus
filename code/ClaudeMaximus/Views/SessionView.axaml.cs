@@ -479,7 +479,6 @@ public partial class SessionView : UserControl
 	}
 #pragma warning restore CS0618
 
-#pragma warning disable CS0618 // Legacy IClipboard methods still functional; new API not yet stable.
 	private async void OnInputPasteCheck(object? sender, KeyEventArgs e)
 	{
 		// Detect Cmd+V / Ctrl+V
@@ -494,79 +493,35 @@ public partial class SessionView : UserControl
 
 		try
 		{
-			var formats = await clipboard.GetFormatsAsync();
-			if (formats == null || formats.Length == 0) return;
-
-			// macOS Cocoa exposes pasted images as "public.png" / "public.tiff" or similar.
-			// Avalonia exposes them as "image/png" / "PNG" depending on platform.
-			// Prefer formats Anthropic supports natively (PNG/JPEG/GIF/WebP); fall back to anything
-			// image-shaped (TIFF, BMP, HEIC) and re-encode to PNG below.
-			string? imageFormat = null;
-			string? imageFormatPriority = null; // tracks which "tier" we matched
-			foreach (var f in formats)
+			// Avalonia 11's IAsyncDataTransfer API exposes pasted images as a Bitmap object
+			// (decoded from whatever format the platform provided — TIFF on macOS screenshots,
+			// PNG from screenshot tools, etc.). We re-encode to PNG since Anthropic's API
+			// only accepts PNG/JPEG/GIF/WebP.
+			//
+			// We use reflection because the API isn't directly exposed in stable Avalonia headers,
+			// but the implementation has been stable for several releases.
+			var bitmap = await TryGetClipboardBitmapAsync(clipboard);
+			if (bitmap != null)
 			{
-				var lower = f.ToLowerInvariant();
-				// Tier 1: natively supported by Anthropic — pick first match and stop
-				if (lower.Contains("png") || lower.Contains("jpeg") || lower.Contains("jpg")
-				    || lower.Contains("gif") || lower.Contains("webp"))
+				try
 				{
-					imageFormat = f;
-					imageFormatPriority = "native";
-					break;
-				}
-				// Tier 2: image-shaped but needs conversion (TIFF/BMP/HEIC)
-				if (imageFormat == null && (lower.Contains("tiff") || lower.Contains("bmp")
-				    || lower.Contains("heic") || lower.Contains("heif")))
-				{
-					imageFormat = f;
-					imageFormatPriority = "convert";
-				}
-			}
-
-			if (imageFormat != null)
-			{
-				var raw = await clipboard.GetDataAsync(imageFormat);
-				if (raw is byte[] bytes && bytes.Length > 0)
-				{
-					string mediaType;
-					string ext;
-					byte[] outBytes = bytes;
-
-					if (imageFormatPriority == "native")
-					{
-						(mediaType, ext) = imageFormat.ToLowerInvariant() switch
-						{
-							var f when f.Contains("png")  => ("image/png",  "png"),
-							var f when f.Contains("jpeg") || f.Contains("jpg") => ("image/jpeg", "jpg"),
-							var f when f.Contains("gif")  => ("image/gif",  "gif"),
-							var f when f.Contains("webp") => ("image/webp", "webp"),
-							_ => ("image/png", "png"),
-						};
-					}
-					else
-					{
-						// Tier 2: re-encode to PNG via Avalonia's Bitmap (Skia under the hood)
-						var converted = TryReencodeToPng(bytes);
-						if (converted == null)
-						{
-							_log.Warning("Failed to convert clipboard image (format={Format}) to PNG", imageFormat);
-							// Don't suppress paste — let the input box handle it as text/garbage
-							return;
-						}
-						outBytes = converted;
-						mediaType = "image/png";
-						ext = "png";
-					}
-
-					var name = $"clipboard-{DateTime.Now:yyyyMMdd-HHmmss}.{ext}";
-					vm.AddAttachmentFromBytes(name, mediaType, outBytes);
+					using var pngStream = new MemoryStream();
+					bitmap.Save(pngStream); // Avalonia's Bitmap.Save defaults to PNG
+					var name = $"clipboard-{DateTime.Now:yyyyMMdd-HHmmss}.png";
+					vm.AddAttachmentFromBytes(name, "image/png", pngStream.ToArray());
 					e.Handled = true; // suppress the default paste so the input box doesn't get binary garbage
 					return;
+				}
+				finally
+				{
+					bitmap.Dispose();
 				}
 			}
 
 			// Check if clipboard contains file paths (file URIs from Finder)
-			if (formats.Contains(DataFormats.Files))
+#pragma warning disable CS0618 // Legacy IClipboard.GetFormatsAsync still functional for file detection.
+			var formats = await clipboard.GetFormatsAsync();
+			if (formats != null && formats.Contains(DataFormats.Files))
 			{
 				var fileObj = await clipboard.GetDataAsync(DataFormats.Files);
 				if (fileObj is IEnumerable<IStorageItem> items)
@@ -581,40 +536,73 @@ public partial class SessionView : UserControl
 							any = true;
 						}
 					}
-					if (any)
-					{
-						e.Handled = true;
-						return;
-					}
+					if (any) e.Handled = true;
 				}
 			}
+#pragma warning restore CS0618
 		}
 		catch (Exception ex)
 		{
 			_log.Debug(ex, "Clipboard paste check failed (non-fatal)");
 		}
 	}
-#pragma warning restore CS0618
 
 	/// <summary>
-	/// Re-encode arbitrary image bytes (TIFF, BMP, HEIC, etc.) to PNG using Avalonia's
-	/// Bitmap class (Skia). Returns null if the bytes can't be decoded as an image.
-	/// Required because Anthropic's API only accepts PNG/JPEG/GIF/WebP.
+	/// Reads an image from the clipboard via Avalonia 11's IAsyncDataTransfer API
+	/// (accessed via reflection since it isn't exposed in stable Avalonia headers).
+	/// Returns the decoded Bitmap, or null if the clipboard doesn't contain an image.
+	/// Caller is responsible for disposing the returned Bitmap.
 	/// </summary>
-	private static byte[]? TryReencodeToPng(byte[] sourceBytes)
+	private static async Task<Avalonia.Media.Imaging.Bitmap?> TryGetClipboardBitmapAsync(
+		Avalonia.Input.Platform.IClipboard clipboard)
 	{
+		var tryGetMethod = clipboard.GetType().GetMethod("TryGetDataAsync", System.Type.EmptyTypes);
+		if (tryGetMethod == null) return null;
+
+		var dtTask = tryGetMethod.Invoke(clipboard, null) as System.Threading.Tasks.Task;
+		if (dtTask == null) return null;
+		await dtTask;
+
+		var dataTransfer = dtTask.GetType().GetProperty("Result")?.GetValue(dtTask);
+		if (dataTransfer == null) return null;
+
 		try
 		{
-			using var sourceStream = new MemoryStream(sourceBytes);
-			using var bitmap = new Avalonia.Media.Imaging.Bitmap(sourceStream);
-			using var pngStream = new MemoryStream();
-			bitmap.Save(pngStream); // Avalonia's Bitmap.Save defaults to PNG
-			return pngStream.ToArray();
+			var itemsProp = dataTransfer.GetType().GetProperty("Items");
+			if (itemsProp?.GetValue(dataTransfer) is not System.Collections.IEnumerable items)
+				return null;
+
+			foreach (var item in items)
+			{
+				var itemType = item.GetType();
+				var fmtsProp = itemType.GetProperty("Formats");
+				var tryGetRawAsync = itemType.GetMethod("TryGetRawAsync");
+				if (fmtsProp?.GetValue(item) is not System.Collections.IEnumerable fmts || tryGetRawAsync == null)
+					continue;
+
+				foreach (var fmt in fmts)
+				{
+					try
+					{
+						if (tryGetRawAsync.Invoke(item, new[] { fmt }) is not System.Threading.Tasks.Task rawTask)
+							continue;
+						await rawTask;
+						var raw = rawTask.GetType().GetProperty("Result")?.GetValue(rawTask);
+						if (raw is Avalonia.Media.Imaging.Bitmap bmp)
+							return bmp;
+					}
+					catch
+					{
+						// Try the next format
+					}
+				}
+			}
 		}
-		catch (Exception ex)
+		finally
 		{
-			_log.Debug(ex, "Failed to re-encode image to PNG");
-			return null;
+			(dataTransfer as IDisposable)?.Dispose();
 		}
+
+		return null;
 	}
 }
