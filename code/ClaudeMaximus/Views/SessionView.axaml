@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:ClaudeMaximus.ViewModels"
              xmlns:views="using:ClaudeMaximus.Views"
+             xmlns:models="using:ClaudeMaximus.Models"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
@@ -33,7 +34,7 @@
             </DockPanel>
         </Border>
 
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="1" DragDrop.AllowDrop="True">
             <ScrollViewer x:Name="MessageScroller"
                           HorizontalScrollBarVisibility="Disabled"
                           VerticalScrollBarVisibility="Auto">
@@ -192,16 +193,73 @@
                       Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
 
         <Border Grid.Row="4" Padding="8"
+                x:Name="InputAreaRoot"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
-                BorderThickness="0,1,0,0">
-            <Grid RowDefinitions="*,Auto">
-                <!-- Row 0: Input area + Send button -->
-                <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
-                    <Panel Grid.Column="0">
+                BorderThickness="0,1,0,0"
+                DragDrop.AllowDrop="True">
+            <Grid RowDefinitions="Auto,*,Auto">
+                <!-- Row 0: Attachment chips (only visible when there are attachments) -->
+                <ItemsControl Grid.Row="0"
+                              ItemsSource="{Binding PendingAttachments}"
+                              IsVisible="{Binding HasPendingAttachments}"
+                              Margin="0,0,0,4"
+                              x:CompileBindings="False">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:PendingAttachment">
+                            <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                                    BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="4"
+                                    Padding="6,3"
+                                    Margin="0,0,4,4">
+                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <TextBlock Text="&#x1F4CE;" FontSize="11" VerticalAlignment="Center"
+                                               IsVisible="{Binding !IsImage}"/>
+                                    <TextBlock Text="&#x1F5BC;" FontSize="11" VerticalAlignment="Center"
+                                               IsVisible="{Binding IsImage}"/>
+                                    <TextBlock Text="{Binding DisplayName}"
+                                               FontSize="11" VerticalAlignment="Center"
+                                               MaxWidth="200" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding SizeText}"
+                                               FontSize="10" Opacity="0.5" VerticalAlignment="Center"/>
+                                    <Button Content="&#x2715;"
+                                            FontSize="10"
+                                            Padding="4,0"
+                                            MinWidth="0" MinHeight="0"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            VerticalAlignment="Center"
+                                            ToolTip.Tip="Remove attachment"
+                                            Click="OnRemoveAttachmentClick"
+                                            Tag="{Binding Id}"/>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- Row 1: Input area + Attach + Send buttons -->
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto">
+                    <Button Grid.Column="0"
+                            x:Name="AttachBtn"
+                            Content="&#x1F4CE;"
+                            FontSize="16"
+                            Width="36"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
+                            Margin="0,0,8,0"
+                            ToolTip.Tip="Attach file or image"
+                            Click="OnAttachClick"/>
+                    <Panel Grid.Column="1">
                         <views:NativeTextBox x:Name="InputBox"
                                  Text="{Binding InputText}"
                                  AcceptsReturn="True"
-                                 Watermark="Type a message... (Ctrl+Enter to send)  |  # symbol  ## file  / command"
+                                 Watermark="Type a message... (Ctrl+Enter to send)  |  # symbol  ## file  / command  📎 paste/drop"
                                  TextWrapping="Wrap"
                                  FontFamily="Cascadia Code,Consolas,monospace"
                                  FontSize="{Binding InputFontSize}"
@@ -216,7 +274,7 @@
                             <views:AutocompletePopup DataContext="{Binding AutocompleteVm}"/>
                         </Popup>
                     </Panel>
-                    <Button Grid.Column="1"
+                    <Button Grid.Column="2"
                             Content="Send"
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Center"
@@ -226,8 +284,8 @@
                             MinWidth="60"
                             Command="{Binding SendCommand}"/>
                 </Grid>
-                <!-- Row 1: Session status bar — always visible -->
-                <Border Grid.Row="1"
+                <!-- Row 2: Session status bar — always visible -->
+                <Border Grid.Row="2"
                         Padding="6,3"
                         Margin="0,4,0,0"
                         CornerRadius="4"

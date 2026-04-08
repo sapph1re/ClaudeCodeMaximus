@@ -26,6 +26,17 @@ public interface ITessynRunService
         string? reasoningEffort = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Send a multimodal message with content blocks (text + images).</summary>
+    Task<string> SendContentAsync(
+        string projectPath,
+        System.Collections.Generic.List<TessynContentBlock> content,
+        string? externalId = null,
+        string? model = null,
+        string? permissionMode = null,
+        string? profile = null,
+        string? reasoningEffort = null,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Cancel an active run.</summary>
     Task CancelAsync(string runId, CancellationToken cancellationToken = default);
 

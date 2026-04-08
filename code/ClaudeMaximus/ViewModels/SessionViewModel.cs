@@ -29,6 +29,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private readonly ICodeIndexService _codeIndexService;
 	private readonly IClaudeProfileService _profileService;
 	private readonly IClaudeSessionImportService _importService;
+	private readonly IAttachmentService _attachmentService;
 	private readonly ITessynRunService? _runService;
 	private readonly ITessynDaemonService? _daemonService;
 	private IDisposable? _runEventSubscription;
@@ -68,6 +69,12 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 	/// <summary>FIFO queue of messages typed while the session was busy streaming a previous run.</summary>
 	private readonly Queue<string> _pendingDaemonMessages = new();
+
+	/// <summary>Attachments staged for the next message (file picker, drag-drop, clipboard paste).</summary>
+	public ObservableCollection<PendingAttachment> PendingAttachments { get; } = [];
+
+	/// <summary>True when there is at least one pending attachment — used to show the chips strip.</summary>
+	public bool HasPendingAttachments => PendingAttachments.Count > 0;
 
 	public string Name
 	{
@@ -383,19 +390,21 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		ICodeIndexService codeIndexService,
 		IClaudeProfileService profileService,
 		IClaudeSessionImportService importService,
+		IAttachmentService attachmentService,
 		ITessynRunService? runService = null,
 		ITessynDaemonService? daemonService = null)
 	{
-		_node             = node;
-		_fileService      = fileService;
-		_processManager   = processManager;
-		_appSettings      = appSettings;
-		_draftService     = draftService;
-		_codeIndexService = codeIndexService;
-		_profileService   = profileService;
-		_importService    = importService;
-		_runService       = runService;
-		_daemonService    = daemonService;
+		_node              = node;
+		_fileService       = fileService;
+		_processManager    = processManager;
+		_appSettings       = appSettings;
+		_draftService      = draftService;
+		_codeIndexService  = codeIndexService;
+		_profileService    = profileService;
+		_importService     = importService;
+		_attachmentService = attachmentService;
+		_runService        = runService;
+		_daemonService     = daemonService;
 		_name             = node.Name;
 		_selectedModelIndex = Math.Clamp(appSettings.Settings.SelectedModelIndex, 0, ModelIds.Length - 1);
 		AutocompleteVm    = new AutocompleteViewModel(codeIndexService);
@@ -500,12 +509,14 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		if (_runService == null) return;
 
 		var message = InputText.Trim();
-		if (string.IsNullOrEmpty(message)) return;
+		var hasAttachments = PendingAttachments.Count > 0;
+		if (string.IsNullOrEmpty(message) && !hasAttachments) return;
 
 		// If a run is already in progress for this session, queue the message and return.
 		// It will be sent automatically when the current run completes (FinishDaemonRun).
 		// This handles the v0.4+ SESSION_BUSY constraint without forcing a single-message-at-a-time UX.
-		if (_activeRunId != null)
+		// Note: queued messages are text-only — attachments must be sent immediately.
+		if (_activeRunId != null && !hasAttachments)
 		{
 			_pendingDaemonMessages.Enqueue(message);
 			InputText = string.Empty;
@@ -518,10 +529,16 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			return;
 		}
 
+		// Snapshot attachments NOW so we can clear them from the UI immediately and send them safely later.
+		var attachmentsToSend = new List<PendingAttachment>(PendingAttachments);
+		PendingAttachments.Clear();
+		this.RaisePropertyChanged(nameof(HasPendingAttachments));
+
 		// For cross-project imported sessions, use the original project path for resume to work
 		var projectPath = _node.Model.OriginalProjectPath ?? _node.Model.WorkingDirectory;
 
-		_log.Debug("SendViaDaemonAsync: ProjectPath={Dir}, ExternalId={Id}", projectPath, _node.ExternalId);
+		_log.Debug("SendViaDaemonAsync: ProjectPath={Dir}, ExternalId={Id}, Attachments={Count}",
+			projectPath, _node.ExternalId, attachmentsToSend.Count);
 
 		InputText = string.Empty;
 
@@ -549,10 +566,18 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		}
 
 		var now = DateTimeOffset.UtcNow;
+		var displayContent = message;
+		if (attachmentsToSend.Count > 0)
+		{
+			var attachmentLine = string.Join(", ", attachmentsToSend.ConvertAll(a => $"📎 {a.DisplayName}"));
+			displayContent = string.IsNullOrEmpty(message)
+				? attachmentLine
+				: $"{message}\n\n{attachmentLine}";
+		}
 		Messages.Add(new MessageEntryViewModel
 		{
 			Role      = Constants.SessionFile.RoleUser,
-			Content   = message,
+			Content   = displayContent,
 			Timestamp = now,
 		});
 		_node.LastPromptTime = now.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
@@ -582,14 +607,31 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 						pendingEvents.Add(evt); // Buffer until runId is known
 				});
 
-			var runId = await _runService.SendAsync(
-				projectPath,
-				augmentedMessage,
-				_node.ExternalId,
-				SelectedModelId,
-				_appSettings.Settings.DaemonPermissionMode,
-				SelectedDaemonProfile,
-				SelectedReasoningEffort);
+			string runId;
+			if (attachmentsToSend.Count > 0)
+			{
+				// Multimodal send: build content blocks (images + text)
+				var content = _attachmentService.ToContentBlocks(attachmentsToSend, augmentedMessage);
+				runId = await _runService.SendContentAsync(
+					projectPath,
+					content,
+					_node.ExternalId,
+					SelectedModelId,
+					_appSettings.Settings.DaemonPermissionMode,
+					SelectedDaemonProfile,
+					SelectedReasoningEffort);
+			}
+			else
+			{
+				runId = await _runService.SendAsync(
+					projectPath,
+					augmentedMessage,
+					_node.ExternalId,
+					SelectedModelId,
+					_appSettings.Settings.DaemonPermissionMode,
+					SelectedDaemonProfile,
+					SelectedReasoningEffort);
+			}
 
 			_activeRunId = runId;
 
@@ -1748,6 +1790,41 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		{
 			_log.Debug(ex, "Failed to load daemon profiles");
 		}
+	}
+
+	/// <summary>Add an attachment from a file path (file picker or drag-drop).</summary>
+	public async System.Threading.Tasks.Task AddAttachmentFromFileAsync(string path)
+	{
+		var att = await _attachmentService.LoadFileAsync(path);
+		if (att == null) return;
+
+		Dispatcher.UIThread.Post(() =>
+		{
+			PendingAttachments.Add(att);
+			this.RaisePropertyChanged(nameof(HasPendingAttachments));
+		});
+	}
+
+	/// <summary>Add an attachment from raw bytes (clipboard image paste).</summary>
+	public void AddAttachmentFromBytes(string displayName, string mediaType, byte[] data)
+	{
+		var att = _attachmentService.WrapBytes(displayName, mediaType, data);
+		PendingAttachments.Add(att);
+		this.RaisePropertyChanged(nameof(HasPendingAttachments));
+	}
+
+	/// <summary>Remove a single attachment by ID (× button on the chip).</summary>
+	public void RemoveAttachment(System.Guid id)
+	{
+		for (var i = PendingAttachments.Count - 1; i >= 0; i--)
+		{
+			if (PendingAttachments[i].Id == id)
+			{
+				PendingAttachments.RemoveAt(i);
+				break;
+			}
+		}
+		this.RaisePropertyChanged(nameof(HasPendingAttachments));
 	}
 
 	private async System.Threading.Tasks.Task LoadCommandsAsync()

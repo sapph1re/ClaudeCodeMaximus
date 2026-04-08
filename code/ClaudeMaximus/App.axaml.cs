@@ -332,6 +332,7 @@ public partial class App : Application
 		services.AddSingleton<IClaudeProfileService, ClaudeProfileService>();
 		services.AddSingleton<ITessynDaemonService, TessynDaemonService>();
 		services.AddSingleton<ITessynRunService, TessynRunService>();
+		services.AddSingleton<IAttachmentService, AttachmentService>();
 		services.AddSingleton<SessionTreeViewModel>();
 		services.AddSingleton<MainWindowViewModel>();
 		services.AddTransient<SettingsViewModel>();

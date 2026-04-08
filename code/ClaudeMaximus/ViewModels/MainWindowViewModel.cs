@@ -19,6 +19,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 	private readonly ICodeIndexService _codeIndexService;
 	private readonly IClaudeProfileService _profileService;
 	private readonly IClaudeSessionImportService _importService;
+	private readonly IAttachmentService _attachmentService;
 	private readonly ISelfUpdateService _selfUpdate;
 	private readonly ITessynRunService? _runService;
 	private readonly ITessynDaemonService? _daemonService;
@@ -197,21 +198,23 @@ public sealed class MainWindowViewModel : ViewModelBase
 		ICodeIndexService codeIndexService,
 		IClaudeProfileService profileService,
 		IClaudeSessionImportService importService,
+		IAttachmentService attachmentService,
 		ISelfUpdateService selfUpdate,
 		SessionTreeViewModel sessionTree,
 		ITessynRunService runService,
 		ITessynDaemonService daemonService)
 	{
-		_appSettings      = appSettings;
-		_fileService      = fileService;
-		_processManager   = processManager;
-		_draftService     = draftService;
-		_codeIndexService = codeIndexService;
-		_profileService   = profileService;
-		_importService    = importService;
-		_selfUpdate       = selfUpdate;
-		_runService       = runService;
-		_daemonService    = daemonService;
+		_appSettings       = appSettings;
+		_fileService       = fileService;
+		_processManager    = processManager;
+		_draftService      = draftService;
+		_codeIndexService  = codeIndexService;
+		_profileService    = profileService;
+		_importService     = importService;
+		_attachmentService = attachmentService;
+		_selfUpdate        = selfUpdate;
+		_runService        = runService;
+		_daemonService     = daemonService;
 		SessionTree       = sessionTree;
 		_splitterPosition = appSettings.Settings.Window.SplitterPosition;
 		_isTreePanelVisible = !appSettings.Settings.IsTreePanelCollapsed;
@@ -288,7 +291,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 			}
 			else
 			{
-				vm = new SessionViewModel(node, _fileService, _processManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _runService, _daemonService);
+				vm = new SessionViewModel(node, _fileService, _processManager, _appSettings, _draftService, _codeIndexService, _profileService, _importService, _attachmentService, _runService, _daemonService);
 				if (_appSettings.Settings.UseTessynDaemon && _daemonService != null && node.ExternalId != null)
 					_ = vm.LoadFromDaemonAsync();
 				else

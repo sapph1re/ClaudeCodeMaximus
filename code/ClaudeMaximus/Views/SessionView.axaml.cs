@@ -1,10 +1,15 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ClaudeMaximus.Models;
@@ -56,6 +61,15 @@ public partial class SessionView : UserControl
 		// Ctrl+scroll changes font size; tunnel so we intercept before the scroller scrolls
 		MessageScroller.AddHandler(InputElement.PointerWheelChangedEvent, OnScrollerWheel, RoutingStrategies.Tunnel);
 		InputBox.AddHandler(InputElement.PointerWheelChangedEvent, OnInputBoxWheel, RoutingStrategies.Tunnel);
+
+		// Drag-and-drop for file attachments — accept on both the input area and the conversation area
+		InputAreaRoot.AddHandler(DragDrop.DragOverEvent, OnDragOver);
+		InputAreaRoot.AddHandler(DragDrop.DropEvent, OnDrop);
+		MessageScroller.AddHandler(DragDrop.DragOverEvent, OnDragOver);
+		MessageScroller.AddHandler(DragDrop.DropEvent, OnDrop);
+
+		// Clipboard paste interception (image bytes / file URIs in addition to text)
+		InputBox.AddHandler(InputElement.KeyDownEvent, OnInputPasteCheck, RoutingStrategies.Tunnel);
 	}
 
 	protected override void OnDataContextChanged(EventArgs e)
@@ -388,4 +402,171 @@ public partial class SessionView : UserControl
 		}
 		return null;
 	}
+
+	// =====================================================================
+	// Attachments: file picker, drag-drop, clipboard paste, chip removal
+	// =====================================================================
+
+	private async void OnAttachClick(object? sender, RoutedEventArgs e)
+	{
+		if (DataContext is not SessionViewModel vm) return;
+
+		var topLevel = TopLevel.GetTopLevel(this);
+		if (topLevel == null) return;
+
+		try
+		{
+			var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+			{
+				Title = "Attach files",
+				AllowMultiple = true,
+			});
+
+			foreach (var file in files)
+			{
+				var path = file.TryGetLocalPath();
+				if (!string.IsNullOrEmpty(path))
+					await vm.AddAttachmentFromFileAsync(path);
+			}
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "File picker failed");
+		}
+	}
+
+	private void OnRemoveAttachmentClick(object? sender, RoutedEventArgs e)
+	{
+		if (DataContext is not SessionViewModel vm) return;
+		if (sender is Button btn && btn.Tag is Guid id)
+			vm.RemoveAttachment(id);
+	}
+
+#pragma warning disable CS0618 // Avalonia's new IDataTransfer API is undocumented; the legacy IDataObject API still works.
+	private void OnDragOver(object? sender, DragEventArgs e)
+	{
+		// Accept files and bitmaps
+		if (e.Data.Contains(DataFormats.Files) || e.Data.Contains("image/png") || e.Data.Contains("image/jpeg"))
+			e.DragEffects = DragDropEffects.Copy;
+		else
+			e.DragEffects = DragDropEffects.None;
+	}
+
+	private async void OnDrop(object? sender, DragEventArgs e)
+	{
+		if (DataContext is not SessionViewModel vm) return;
+
+		try
+		{
+			if (e.Data.Contains(DataFormats.Files))
+			{
+				var items = e.Data.GetFiles();
+				if (items != null)
+				{
+					foreach (var item in items)
+					{
+						var path = item.TryGetLocalPath();
+						if (!string.IsNullOrEmpty(path) && File.Exists(path))
+							await vm.AddAttachmentFromFileAsync(path);
+					}
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "Drop handling failed");
+		}
+	}
+#pragma warning restore CS0618
+
+#pragma warning disable CS0618 // Legacy IClipboard methods still functional; new API not yet stable.
+	private async void OnInputPasteCheck(object? sender, KeyEventArgs e)
+	{
+		// Detect Cmd+V / Ctrl+V
+		var isPaste = e.Key == Key.V &&
+		              (e.KeyModifiers.HasFlag(KeyModifiers.Meta) || e.KeyModifiers.HasFlag(KeyModifiers.Control));
+		if (!isPaste) return;
+		if (DataContext is not SessionViewModel vm) return;
+
+		var topLevel = TopLevel.GetTopLevel(this);
+		var clipboard = topLevel?.Clipboard;
+		if (clipboard == null) return;
+
+		try
+		{
+			var formats = await clipboard.GetFormatsAsync();
+			if (formats == null || formats.Length == 0) return;
+
+			// macOS Cocoa exposes pasted images as "public.png" / "public.tiff" or similar.
+			// Avalonia exposes them as "image/png" / "PNG" depending on platform.
+			string? imageFormat = null;
+			foreach (var f in formats)
+			{
+				var lower = f.ToLowerInvariant();
+				if (lower.Contains("png") || lower == "image/png")
+				{
+					imageFormat = f;
+					break;
+				}
+				if (lower.Contains("jpeg") || lower.Contains("jpg") || lower == "image/jpeg")
+				{
+					imageFormat = f;
+					break;
+				}
+				if (lower.Contains("tiff"))
+				{
+					imageFormat = f;
+					break;
+				}
+			}
+
+			if (imageFormat != null)
+			{
+				var raw = await clipboard.GetDataAsync(imageFormat);
+				if (raw is byte[] bytes && bytes.Length > 0)
+				{
+					var (mediaType, ext) = imageFormat.ToLowerInvariant() switch
+					{
+						var f when f.Contains("png")  => ("image/png",  "png"),
+						var f when f.Contains("jpeg") || f.Contains("jpg") => ("image/jpeg", "jpg"),
+						var f when f.Contains("tiff") => ("image/tiff", "tiff"),
+						_ => ("application/octet-stream", "bin"),
+					};
+					var name = $"clipboard-{DateTime.Now:yyyyMMdd-HHmmss}.{ext}";
+					vm.AddAttachmentFromBytes(name, mediaType, bytes);
+					e.Handled = true; // suppress the default paste so the input box doesn't get binary garbage
+					return;
+				}
+			}
+
+			// Check if clipboard contains file paths (file URIs from Finder)
+			if (formats.Contains(DataFormats.Files))
+			{
+				var fileObj = await clipboard.GetDataAsync(DataFormats.Files);
+				if (fileObj is IEnumerable<IStorageItem> items)
+				{
+					var any = false;
+					foreach (var item in items)
+					{
+						var path = item.TryGetLocalPath();
+						if (!string.IsNullOrEmpty(path) && File.Exists(path))
+						{
+							await vm.AddAttachmentFromFileAsync(path);
+							any = true;
+						}
+					}
+					if (any)
+					{
+						e.Handled = true;
+						return;
+					}
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			_log.Debug(ex, "Clipboard paste check failed (non-fatal)");
+		}
+	}
+#pragma warning restore CS0618
 }
