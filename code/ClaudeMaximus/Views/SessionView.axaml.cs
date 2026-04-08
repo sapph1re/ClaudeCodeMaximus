@@ -499,24 +499,27 @@ public partial class SessionView : UserControl
 
 			// macOS Cocoa exposes pasted images as "public.png" / "public.tiff" or similar.
 			// Avalonia exposes them as "image/png" / "PNG" depending on platform.
+			// Prefer formats Anthropic supports natively (PNG/JPEG/GIF/WebP); fall back to anything
+			// image-shaped (TIFF, BMP, HEIC) and re-encode to PNG below.
 			string? imageFormat = null;
+			string? imageFormatPriority = null; // tracks which "tier" we matched
 			foreach (var f in formats)
 			{
 				var lower = f.ToLowerInvariant();
-				if (lower.Contains("png") || lower == "image/png")
+				// Tier 1: natively supported by Anthropic — pick first match and stop
+				if (lower.Contains("png") || lower.Contains("jpeg") || lower.Contains("jpg")
+				    || lower.Contains("gif") || lower.Contains("webp"))
 				{
 					imageFormat = f;
+					imageFormatPriority = "native";
 					break;
 				}
-				if (lower.Contains("jpeg") || lower.Contains("jpg") || lower == "image/jpeg")
+				// Tier 2: image-shaped but needs conversion (TIFF/BMP/HEIC)
+				if (imageFormat == null && (lower.Contains("tiff") || lower.Contains("bmp")
+				    || lower.Contains("heic") || lower.Contains("heif")))
 				{
 					imageFormat = f;
-					break;
-				}
-				if (lower.Contains("tiff"))
-				{
-					imageFormat = f;
-					break;
+					imageFormatPriority = "convert";
 				}
 			}
 
@@ -525,15 +528,38 @@ public partial class SessionView : UserControl
 				var raw = await clipboard.GetDataAsync(imageFormat);
 				if (raw is byte[] bytes && bytes.Length > 0)
 				{
-					var (mediaType, ext) = imageFormat.ToLowerInvariant() switch
+					string mediaType;
+					string ext;
+					byte[] outBytes = bytes;
+
+					if (imageFormatPriority == "native")
 					{
-						var f when f.Contains("png")  => ("image/png",  "png"),
-						var f when f.Contains("jpeg") || f.Contains("jpg") => ("image/jpeg", "jpg"),
-						var f when f.Contains("tiff") => ("image/tiff", "tiff"),
-						_ => ("application/octet-stream", "bin"),
-					};
+						(mediaType, ext) = imageFormat.ToLowerInvariant() switch
+						{
+							var f when f.Contains("png")  => ("image/png",  "png"),
+							var f when f.Contains("jpeg") || f.Contains("jpg") => ("image/jpeg", "jpg"),
+							var f when f.Contains("gif")  => ("image/gif",  "gif"),
+							var f when f.Contains("webp") => ("image/webp", "webp"),
+							_ => ("image/png", "png"),
+						};
+					}
+					else
+					{
+						// Tier 2: re-encode to PNG via Avalonia's Bitmap (Skia under the hood)
+						var converted = TryReencodeToPng(bytes);
+						if (converted == null)
+						{
+							_log.Warning("Failed to convert clipboard image (format={Format}) to PNG", imageFormat);
+							// Don't suppress paste — let the input box handle it as text/garbage
+							return;
+						}
+						outBytes = converted;
+						mediaType = "image/png";
+						ext = "png";
+					}
+
 					var name = $"clipboard-{DateTime.Now:yyyyMMdd-HHmmss}.{ext}";
-					vm.AddAttachmentFromBytes(name, mediaType, bytes);
+					vm.AddAttachmentFromBytes(name, mediaType, outBytes);
 					e.Handled = true; // suppress the default paste so the input box doesn't get binary garbage
 					return;
 				}
@@ -569,4 +595,26 @@ public partial class SessionView : UserControl
 		}
 	}
 #pragma warning restore CS0618
+
+	/// <summary>
+	/// Re-encode arbitrary image bytes (TIFF, BMP, HEIC, etc.) to PNG using Avalonia's
+	/// Bitmap class (Skia). Returns null if the bytes can't be decoded as an image.
+	/// Required because Anthropic's API only accepts PNG/JPEG/GIF/WebP.
+	/// </summary>
+	private static byte[]? TryReencodeToPng(byte[] sourceBytes)
+	{
+		try
+		{
+			using var sourceStream = new MemoryStream(sourceBytes);
+			using var bitmap = new Avalonia.Media.Imaging.Bitmap(sourceStream);
+			using var pngStream = new MemoryStream();
+			bitmap.Save(pngStream); // Avalonia's Bitmap.Save defaults to PNG
+			return pngStream.ToArray();
+		}
+		catch (Exception ex)
+		{
+			_log.Debug(ex, "Failed to re-encode image to PNG");
+			return null;
+		}
+	}
 }
