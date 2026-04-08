@@ -601,6 +601,46 @@ public sealed class TessynDaemonService : ITessynDaemonService
             : throw new InvalidOperationException("run.send response missing runId");
     }
 
+    public async Task<string> RunSendContentAsync(
+        List<TessynContentBlock> content, string projectPath, string? externalId, string? model,
+        string? permissionMode, string? profile, string? reasoningEffort,
+        CancellationToken cancellationToken)
+    {
+        var p = new Dictionary<string, object?>
+        {
+            ["content"] = content,
+            ["projectPath"] = projectPath,
+        };
+        if (externalId != null) p["externalId"] = externalId;
+        if (model != null) p["model"] = model;
+        if (permissionMode != null) p["permissionMode"] = permissionMode;
+        if (profile != null) p["profile"] = profile;
+        if (reasoningEffort != null) p["reasoningEffort"] = reasoningEffort;
+
+        var result = await SendRpcAsync<JsonElement>("run.send", p, cancellationToken);
+        return result.TryGetProperty("runId", out var r)
+            ? r.GetString() ?? throw new InvalidOperationException("run.send returned null runId")
+            : throw new InvalidOperationException("run.send response missing runId");
+    }
+
+    public async Task<List<string>> SessionsRunningListAsync(CancellationToken cancellationToken)
+    {
+        var result = await SendRpcAsync<JsonElement>("sessions.runningList", null, cancellationToken);
+        var list = new List<string>();
+        if (result.TryGetProperty("externalIds", out var arr) && arr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in arr.EnumerateArray())
+            {
+                var s = item.GetString();
+                if (s != null) list.Add(s);
+            }
+        }
+        return list;
+    }
+
+    public Task SessionsCloseAsync(string externalId, CancellationToken cancellationToken) =>
+        SendRpcVoidAsync("sessions.close", new { externalId }, cancellationToken);
+
     public Task RunCancelAsync(string runId, CancellationToken cancellationToken) =>
         SendRpcVoidAsync("run.cancel", new { runId }, cancellationToken);
 

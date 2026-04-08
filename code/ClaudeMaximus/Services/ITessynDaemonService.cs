@@ -120,6 +120,28 @@ public interface ITessynDaemonService : IDisposable
         string? reasoningEffort = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Send a multimodal message with text and/or image content blocks (daemon v0.4+).
+    /// Returns the run ID immediately. Events stream via RunEvents.
+    /// </summary>
+    Task<string> RunSendContentAsync(
+        List<TessynContentBlock> content,
+        string projectPath,
+        string? externalId = null,
+        string? model = null,
+        string? permissionMode = null,
+        string? profile = null,
+        string? reasoningEffort = null,
+        CancellationToken cancellationToken = default);
+
+    // --- Session lifecycle (daemon v0.4+) ---
+
+    /// <summary>List externalIds of currently running (warm) claude processes.</summary>
+    Task<List<string>> SessionsRunningListAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Close (kill) the persistent claude process for a session. Idempotent.</summary>
+    Task SessionsCloseAsync(string externalId, CancellationToken cancellationToken = default);
+
     /// <summary>Cancel an active run via SIGINT.</summary>
     Task RunCancelAsync(string runId, CancellationToken cancellationToken = default);
 

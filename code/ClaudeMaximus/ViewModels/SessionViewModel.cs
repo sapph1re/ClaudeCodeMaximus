@@ -66,6 +66,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private decimal _sessionTotalCost;
 	private List<TessynProfile> _daemonProfiles = [];
 
+	/// <summary>FIFO queue of messages typed while the session was busy streaming a previous run.</summary>
+	private readonly Queue<string> _pendingDaemonMessages = new();
+
 	public string Name
 	{
 		get => _name;
@@ -499,6 +502,22 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		var message = InputText.Trim();
 		if (string.IsNullOrEmpty(message)) return;
 
+		// If a run is already in progress for this session, queue the message and return.
+		// It will be sent automatically when the current run completes (FinishDaemonRun).
+		// This handles the v0.4+ SESSION_BUSY constraint without forcing a single-message-at-a-time UX.
+		if (_activeRunId != null)
+		{
+			_pendingDaemonMessages.Enqueue(message);
+			InputText = string.Empty;
+			Messages.Add(new MessageEntryViewModel
+			{
+				Role      = Constants.SessionFile.RoleSystem,
+				Content   = $"[Queued — will send when current run completes ({_pendingDaemonMessages.Count} in queue)]",
+				Timestamp = DateTimeOffset.UtcNow,
+			});
+			return;
+		}
+
 		// For cross-project imported sessions, use the original project path for resume to work
 		var projectPath = _node.Model.OriginalProjectPath ?? _node.Model.WorkingDirectory;
 
@@ -587,6 +606,47 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			_runEventSubscription = _runService.RunEvents
 				.Where(e => e.RunId == runId)
 				.Subscribe(HandleRunEvent);
+		}
+		catch (TessynRpcException ex) when (ex.Code == Constants.Tessyn.ErrorSessionBusy)
+		{
+			// Daemon says the session is still streaming a previous run.
+			// This can happen if our local _activeRunId check missed an in-flight run
+			// (e.g. after a reconnect). Re-queue the message and reset busy state.
+			_log.Information("SESSION_BUSY: re-queueing message");
+			_pendingDaemonMessages.Enqueue(message);
+
+			Dispatcher.UIThread.Post(() =>
+			{
+				for (var i = Messages.Count - 1; i >= 0; i--)
+					if (Messages[i].IsProgress) Messages.RemoveAt(i);
+
+				// Replace the user bubble we already added with a queued indicator
+				// (the user bubble will reappear when the message is actually sent)
+				for (var i = Messages.Count - 1; i >= 0; i--)
+					if (Messages[i].IsUser && Messages[i].Content == message)
+					{
+						Messages.RemoveAt(i);
+						break;
+					}
+
+				Messages.Add(new MessageEntryViewModel
+				{
+					Role      = Constants.SessionFile.RoleSystem,
+					Content   = $"[Queued — will send when current run completes ({_pendingDaemonMessages.Count} in queue)]",
+					Timestamp = DateTimeOffset.UtcNow,
+				});
+
+				_busyCount = Math.Max(0, _busyCount - 1);
+				if (_busyCount == 0)
+				{
+					var t = _thinkingTimer;
+					_thinkingTimer = null;
+					t?.Stop();
+					ThinkingDuration = string.Empty;
+					IsBusy = false;
+					_node.IsRunning = false;
+				}
+			});
 		}
 		catch (Exception ex)
 		{
@@ -814,16 +874,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_runEventSubscription?.Dispose();
 		_runEventSubscription = null;
 
-		// Trigger daemon reindex so new messages are persisted in the index.
-		// Workaround: daemon's incremental reindex after run completion isn't reliable yet.
-		if (_daemonService != null)
-		{
-			_ = Task.Run(async () =>
-			{
-				try { await _daemonService.ReindexAsync(); }
-				catch (Exception ex) { _log.Debug(ex, "Post-run reindex failed"); }
-			});
-		}
+		// daemon v0.4.1+ auto-reindexes on result events — no manual reindex needed.
 
 		// Post-run behavior: clear session and auto-compact (mirrors legacy path)
 		if (success)
@@ -884,7 +935,24 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				IsBusy = false;
 				_node.IsRunning = false;
 			}
+
+			// Drain any messages queued while this run was streaming
+			DrainPendingDaemonMessages();
 		});
+	}
+
+	/// <summary>
+	/// Sends the next queued message (if any) via the daemon.
+	/// Called from FinishDaemonRun when a run completes.
+	/// </summary>
+	private void DrainPendingDaemonMessages()
+	{
+		if (_pendingDaemonMessages.Count == 0) return;
+		if (_activeRunId != null) return; // safety: don't send if another run somehow started
+
+		var next = _pendingDaemonMessages.Dequeue();
+		InputText = next;
+		_ = SendViaDaemonAsync();
 	}
 
 	/// <summary>Whether this SessionViewModel should use Tessyn daemon for operations.</summary>
