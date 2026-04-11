@@ -144,6 +144,9 @@ public interface ITessynDaemonService : IDisposable
     Task<TessynProfilesListResult> ProfilesListAsync(bool checkAuth = false, CancellationToken cancellationToken = default);
 
     /// <summary>Check auth status for a specific profile.</summary>
+    /// <summary>Register a new profile with the daemon.</summary>
+    Task ProfilesAddAsync(string name, string configDir, CancellationToken cancellationToken = default);
+
     Task<TessynProfileAuthInfo> AuthStatusAsync(string? profile = null, CancellationToken cancellationToken = default);
 
     // --- Daemon management ---

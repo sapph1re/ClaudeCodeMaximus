@@ -308,6 +308,24 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		get => _selectedDaemonProfileIndex;
 		set
 		{
+			// "Add account..." is always the last item
+			if (value == DaemonProfileNames.Count - 1 && DaemonProfileNames.Count > 0
+				&& DaemonProfileNames[value] == "Add account...")
+			{
+				_ = HandleAddDaemonProfileAsync();
+				this.RaisePropertyChanged(); // revert selection visually
+				return;
+			}
+
+			// Clicking an unauthenticated profile triggers login for it
+			if (value >= 0 && value < _daemonProfiles.Count
+				&& _daemonProfiles[value].Auth is not { LoggedIn: true })
+			{
+				_ = HandleLoginForProfileAsync(_daemonProfiles[value]);
+				this.RaisePropertyChanged(); // revert selection visually
+				return;
+			}
+
 			this.RaiseAndSetIfChanged(ref _selectedDaemonProfileIndex, value);
 			var profileName = value >= 0 && value < _daemonProfiles.Count
 				? (_daemonProfiles[value].IsDefault ? null : _daemonProfiles[value].Name)
@@ -1672,6 +1690,112 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		}
 	}
 
+	/// <summary>Launch auth login for an unauthenticated daemon profile, then reload profiles.</summary>
+	private async System.Threading.Tasks.Task HandleLoginForProfileAsync(TessynProfile profile)
+	{
+		var statusMsg = new MessageEntryViewModel
+		{
+			Role      = Constants.SessionFile.RoleSystem,
+			Content   = $"Launching authentication for profile '{profile.Name}'...",
+			Timestamp = DateTimeOffset.UtcNow,
+		};
+		Messages.Add(statusMsg);
+
+		try
+		{
+			var claudePath = _appSettings.Settings.ClaudePath;
+			await _profileService.LaunchAuthLoginAsync(claudePath, profile.ConfigDir ?? System.IO.Path.Combine(
+				Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude"));
+
+			// Reload profiles to pick up the new auth state
+			await LoadDaemonProfilesAsync();
+
+			// Check if it worked
+			var p = _daemonProfiles.FirstOrDefault(dp => dp.Name == profile.Name);
+			Dispatcher.UIThread.Post(() =>
+			{
+				statusMsg.Content = p?.Auth is { LoggedIn: true }
+					? $"Logged in as {p.Auth.Email}"
+					: "Authentication was not completed.";
+			});
+		}
+		catch (Exception ex)
+		{
+			_log.Error(ex, "Failed to launch auth for profile {Profile}", profile.Name);
+			Dispatcher.UIThread.Post(() =>
+				statusMsg.Content = $"Failed to launch authentication: {ex.Message}");
+		}
+	}
+
+	/// <summary>Add a new daemon profile: create config dir, register with daemon, launch auth.</summary>
+	private async System.Threading.Tasks.Task HandleAddDaemonProfileAsync()
+	{
+		// Generate a unique profile name and config dir
+		var baseName = "account";
+		var baseDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+		var name = baseName;
+		var configDir = System.IO.Path.Combine(baseDir, $".claude-{name}");
+		var counter = 2;
+		while (System.IO.Directory.Exists(configDir))
+		{
+			name = $"{baseName}{counter}";
+			configDir = System.IO.Path.Combine(baseDir, $".claude-{name}");
+			counter++;
+		}
+
+		var statusMsg = new MessageEntryViewModel
+		{
+			Role      = Constants.SessionFile.RoleSystem,
+			Content   = "Adding new account — launching authentication...",
+			Timestamp = DateTimeOffset.UtcNow,
+		};
+		Messages.Add(statusMsg);
+
+		try
+		{
+			// Create the config dir
+			System.IO.Directory.CreateDirectory(configDir);
+
+			// Register with daemon
+			await _daemonService!.ProfilesAddAsync(name, configDir, default);
+
+			// Launch auth
+			var claudePath = _appSettings.Settings.ClaudePath;
+			await _profileService.LaunchAuthLoginAsync(claudePath, configDir);
+
+			// Reload profiles
+			await LoadDaemonProfilesAsync();
+
+			var p = _daemonProfiles.FirstOrDefault(dp => dp.Name == name);
+			Dispatcher.UIThread.Post(() =>
+			{
+				if (p?.Auth is { LoggedIn: true })
+				{
+					statusMsg.Content = $"Account added: {p.Auth.Email}";
+					// Auto-select the new profile
+					var idx = _daemonProfiles.IndexOf(p);
+					if (idx >= 0)
+					{
+						_selectedDaemonProfileIndex = idx;
+						this.RaisePropertyChanged(nameof(SelectedDaemonProfileIndex));
+						_appSettings.Settings.DaemonProfile = name;
+						_appSettings.Save();
+					}
+				}
+				else
+				{
+					statusMsg.Content = "Authentication was not completed. The profile was created but not logged in.";
+				}
+			});
+		}
+		catch (Exception ex)
+		{
+			_log.Error(ex, "Failed to add daemon profile");
+			Dispatcher.UIThread.Post(() =>
+				statusMsg.Content = $"Failed to add account: {ex.Message}");
+		}
+	}
+
 	private async System.Threading.Tasks.Task LoadDaemonProfilesAsync()
 	{
 		try
@@ -1700,7 +1824,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 					}
 					else
 					{
-						label = p.Name;
+						label = $"{p.Name} (login)";
 					}
 					DaemonProfileNames.Add(label);
 
@@ -1711,6 +1835,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				// If no saved preference, prefer the first authenticated profile
 				if (savedProfile == null && firstAuthIdx >= 0)
 					selectedIdx = firstAuthIdx;
+
+				// Always add "Add account..." as the last entry
+				DaemonProfileNames.Add("Add account...");
 
 				_selectedDaemonProfileIndex = selectedIdx;
 				this.RaisePropertyChanged(nameof(SelectedDaemonProfileIndex));

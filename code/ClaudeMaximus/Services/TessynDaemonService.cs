@@ -658,6 +658,9 @@ public sealed class TessynDaemonService : ITessynDaemonService
         return result;
     }
 
+    public Task ProfilesAddAsync(string name, string configDir, CancellationToken cancellationToken) =>
+        SendRpcVoidAsync("profiles.add", new { name, configDir }, cancellationToken);
+
     public async Task<TessynProfileAuthInfo> AuthStatusAsync(string? profile, CancellationToken cancellationToken)
     {
         var p = new Dictionary<string, object?>();
