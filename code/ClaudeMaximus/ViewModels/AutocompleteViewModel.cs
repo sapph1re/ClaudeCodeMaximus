@@ -42,6 +42,9 @@ public sealed class AutocompleteViewModel : ViewModelBase
 	/// <summary>Set the available slash commands for autocomplete (fetched from daemon).</summary>
 	public void SetCommands(List<TessynCommand> commands) => _commands = commands;
 
+	/// <summary>Get the cached command list (for /help display).</summary>
+	public List<TessynCommand> GetCommands() => _commands;
+
 	public void UpdateSuggestions(string workingDirectory, AutocompleteTriggerModel trigger)
 	{
 		if (trigger.Mode == AutocompleteMode.None)

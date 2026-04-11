@@ -1247,19 +1247,30 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	{
 		var trimmed = InputText.Trim();
 
-		// Intercept /login as a client-side command (works even without daemon)
-		if (trimmed.Equals("/login", StringComparison.OrdinalIgnoreCase))
+		// Intercept slash commands — some handled client-side, others go to daemon
+		if (trimmed.StartsWith('/') && !trimmed.Contains('\n'))
 		{
-			InputText = string.Empty;
-			await HandleLoginCommandAsync();
-			return;
-		}
+			var cmdLower = trimmed.Split(' ', 2)[0].ToLowerInvariant();
 
-		// Route other slash commands through the daemon
-		if (UseDaemon && trimmed.StartsWith('/') && !trimmed.Contains('\n'))
-		{
-			await ExecuteSlashCommandAsync(trimmed);
-			return;
+			if (HandleClientSideCommand(cmdLower))
+			{
+				InputText = string.Empty;
+				return;
+			}
+
+			if (cmdLower == "/login")
+			{
+				InputText = string.Empty;
+				await HandleLoginCommandAsync();
+				return;
+			}
+
+			// Skills and API-bound commands go to daemon
+			if (UseDaemon)
+			{
+				await ExecuteSlashCommandAsync(trimmed);
+				return;
+			}
 		}
 
 		if (UseDaemon)
@@ -1530,6 +1541,98 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 					break;
 			}
 		});
+	}
+
+	/// <summary>
+	/// Handles built-in commands that the CLI processes locally (no API call).
+	/// Returns true if the command was handled, false to fall through to daemon.
+	/// </summary>
+	private bool HandleClientSideCommand(string cmdLower)
+	{
+		string? response = cmdLower switch
+		{
+			"/help" => FormatHelpOutput(),
+			"/cost" => string.IsNullOrEmpty(SessionCostText)
+				? "No cost data yet. Send a message first."
+				: $"Session cost: {SessionCostText}",
+			"/context" => string.IsNullOrEmpty(ContextUsageText)
+				? "No context data yet. Send a message first."
+				: $"Context usage: {ContextUsageText}\nModel: {CurrentModelText}",
+			"/model" => string.IsNullOrEmpty(CurrentModelText)
+				? "Model not yet known. Send a message to see which model is used."
+				: $"Current model: {CurrentModelText}\nOverride: {SelectedModelId ?? "none (using default)"}",
+			"/status" => FormatStatusOutput(),
+			"/clear" => null, // special handling below
+			_ => null,
+		};
+
+		if (cmdLower == "/clear")
+		{
+			Messages.Add(new MessageEntryViewModel
+			{
+				Role = Constants.SessionFile.RoleSystem,
+				Content = "Session context cleared.",
+				Timestamp = DateTimeOffset.UtcNow,
+			});
+			_node.Model.ClaudeSessionId = null;
+			_node.Model.ExternalId = null;
+			_appSettings.Save();
+			this.RaisePropertyChanged(nameof(CanClear));
+			CurrentModelText = string.Empty;
+			_sessionTotalCost = 0;
+			SessionCostText = string.Empty;
+			ContextUsageText = string.Empty;
+			return true;
+		}
+
+		if (response == null)
+			return false;
+
+		Messages.Add(new MessageEntryViewModel
+		{
+			Role = Constants.SessionFile.RoleSystem,
+			Content = $"{cmdLower}\n{response}",
+			Timestamp = DateTimeOffset.UtcNow,
+		});
+		return true;
+	}
+
+	private string FormatHelpOutput()
+	{
+		var sb = new System.Text.StringBuilder();
+		sb.AppendLine("Available commands:\n");
+		var commands = AutocompleteVm.GetCommands();
+		var builtins = commands.Where(c => c.Type == "builtin").ToList();
+		var skills = commands.Where(c => c.Type == "skill").ToList();
+
+		if (builtins.Count > 0)
+		{
+			foreach (var cmd in builtins)
+				sb.AppendLine($"  /{cmd.Name,-16} {cmd.Description}");
+		}
+		if (skills.Count > 0)
+		{
+			sb.AppendLine("\nSkills:");
+			foreach (var cmd in skills)
+				sb.AppendLine($"  /{cmd.Name,-16} {cmd.Description}");
+		}
+		return sb.ToString().TrimEnd();
+	}
+
+	private string FormatStatusOutput()
+	{
+		var sb = new System.Text.StringBuilder();
+		sb.AppendLine($"Session:   {_node.Name}");
+		sb.AppendLine($"Profile:   {SelectedDaemonProfile ?? "default"}");
+		if (!string.IsNullOrEmpty(CurrentModelText))
+			sb.AppendLine($"Model:     {CurrentModelText}");
+		sb.AppendLine($"Effort:    {SelectedReasoningEffort ?? "default"}");
+		if (!string.IsNullOrEmpty(ContextUsageText))
+			sb.AppendLine($"Context:   {ContextUsageText}");
+		if (!string.IsNullOrEmpty(SessionCostText))
+			sb.AppendLine($"Cost:      {SessionCostText}");
+		sb.AppendLine($"Directory: {WorkingDirectory}");
+		return sb.ToString().TrimEnd();
 	}
 
 	private async System.Threading.Tasks.Task ExecuteSlashCommandAsync(string input)
