@@ -57,6 +57,35 @@ public partial class SessionView : UserControl
 		MessageScroller.AddHandler(InputElement.PointerWheelChangedEvent, OnScrollerWheel, RoutingStrategies.Tunnel);
 		InputBox.AddHandler(InputElement.PointerWheelChangedEvent, OnInputBoxWheel, RoutingStrategies.Tunnel);
 
+		// Click on autocomplete suggestion accepts it — find the ListBox inside the popup
+		AutocompletePopup.Opened += (_, _) =>
+		{
+			var popupContent = AutocompletePopup.Child;
+			if (popupContent is AutocompletePopup acPopup)
+			{
+				var listBox = acPopup.FindControl<ListBox>("SuggestionList");
+				if (listBox != null && listBox.Tag == null) // Tag prevents double-hooking
+				{
+					listBox.Tag = "hooked";
+					listBox.DoubleTapped += (_, _) =>
+					{
+						if (DataContext is SessionViewModel vm)
+							AcceptAutocompleteSuggestion(vm);
+					};
+					listBox.Tapped += (_, e) =>
+					{
+						// Only accept if they tapped an actual item (not whitespace)
+						if (e.Source is Avalonia.Visual v)
+						{
+							var item = v.FindAncestorOfType<ListBoxItem>();
+							if (item != null && DataContext is SessionViewModel vm)
+								AcceptAutocompleteSuggestion(vm);
+						}
+					};
+				}
+			}
+		};
+
 		// Dismiss autocomplete popup when the input loses focus (prevents topmost-over-other-apps)
 		InputBox.LostFocus += (_, _) =>
 		{

@@ -22,9 +22,7 @@
                  ItemsSource="{Binding Suggestions}"
                  SelectedIndex="{Binding SelectedIndex}"
                  Background="Transparent"
-                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                 DoubleTapped="OnSuggestionDoubleTapped"
-                 Tapped="OnSuggestionTapped">
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="models:AutocompleteSuggestionModel"
                               x:CompileBindings="False">
