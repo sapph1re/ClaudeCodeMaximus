@@ -61,6 +61,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private bool _isProfileAuthInProgress;
 	private int _selectedDaemonProfileIndex;
 	private int _selectedEffortIndex;
+	private string _currentModelText = string.Empty;
 	private string _contextUsageText = string.Empty;
 	private string _sessionCostText = string.Empty;
 	private decimal _sessionTotalCost;
@@ -234,7 +235,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	}
 
 	/// <summary>Display names for the model selector.</summary>
-	public static string[] AvailableModels { get; } = ["Sonnet (default)", "Opus", "Sonnet", "Haiku"];
+	public static string[] AvailableModels { get; } = ["Default", "Opus", "Sonnet", "Haiku"];
 
 	/// <summary>Model aliases passed to --model flag. Empty string means no flag. CLI resolves aliases to latest version.</summary>
 	private static readonly string[] ModelIds = ["", "opus", "sonnet", "haiku"];
@@ -325,7 +326,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	// --- Reasoning effort ---
 
 	/// <summary>Display names for reasoning effort selector.</summary>
-	public static string[] AvailableEfforts { get; } = ["Medium (default)", "Low", "Medium", "High"];
+	public static string[] AvailableEfforts { get; } = ["Default", "Low", "Medium", "High"];
 
 	private static readonly string[] EffortIds = ["", "low", "medium", "high"];
 
@@ -340,6 +341,13 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_selectedEffortIndex > 0 && _selectedEffortIndex < EffortIds.Length
 			? EffortIds[_selectedEffortIndex]
 			: null;
+
+	/// <summary>Actual model name reported by the daemon in run.system events.</summary>
+	public string CurrentModelText
+	{
+		get => _currentModelText;
+		private set => this.RaiseAndSetIfChanged(ref _currentModelText, value);
+	}
 
 	// --- Context and cost display ---
 
@@ -404,6 +412,10 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		// Load daemon profiles and commands asynchronously
 		if (_daemonService != null)
 		{
+			// Pre-populate with saved profile so the dropdown isn't empty while loading
+			var savedProfile = _appSettings.Settings.DaemonProfile;
+			DaemonProfileNames.Add(savedProfile ?? "Default");
+
 			_ = LoadDaemonProfilesAsync();
 			_ = LoadCommandsAsync();
 		}
@@ -640,6 +652,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 						_appSettings.Save();
 					});
 				}
+				// Show actual model name in the status bar
+				if (!string.IsNullOrEmpty(evt.Model))
+					Dispatcher.UIThread.Post(() => CurrentModelText = evt.Model!);
 				break;
 
 			case "delta" when evt.Delta != null:
@@ -727,14 +742,21 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 					if (evt.Usage != null)
 					{
+						var usageText = evt.Usage.InputTokens == 0 && evt.Usage.OutputTokens == 0
+							? "Command completed."
+							: $"[{evt.Usage.InputTokens} in / {evt.Usage.OutputTokens} out, {evt.Usage.DurationMs / 1000.0:F1}s, ${evt.Usage.CostUsd:F4}]";
 						Messages.Add(new MessageEntryViewModel
 						{
 							Role      = Constants.SessionFile.RoleSystem,
-							Content   = $"[{evt.Usage.InputTokens} in / {evt.Usage.OutputTokens} out, {evt.Usage.DurationMs / 1000.0:F1}s, ${evt.Usage.CostUsd:F4}]",
+							Content   = usageText,
 							Timestamp = DateTimeOffset.UtcNow,
 						});
-						UpdateSessionCost((decimal)evt.Usage.CostUsd);
-						UpdateContextUsage(evt.Usage.InputTokens);
+						// Only update cost/context for real API calls
+						if (evt.Usage.InputTokens > 0)
+						{
+							UpdateSessionCost((decimal)evt.Usage.CostUsd);
+							UpdateContextUsage(evt.Usage.InputTokens);
+						}
 					}
 				});
 				FinishDaemonRun(success: true);
@@ -1661,9 +1683,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				for (var i = 0; i < _daemonProfiles.Count; i++)
 				{
 					var p = _daemonProfiles[i];
-					var label = p.Auth is { LoggedIn: true }
-						? p.Auth.Email ?? p.Name
-						: $"{p.Name} (not logged in)";
+					var label = p.Auth is { LoggedIn: true, Email: not null }
+						? p.Auth.Email
+						: p.Name;
 					DaemonProfileNames.Add(label);
 
 					if (savedProfile != null && p.Name == savedProfile)

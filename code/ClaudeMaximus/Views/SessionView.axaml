@@ -254,6 +254,10 @@
                                       FontSize="11"
                                       MinWidth="80"
                                       Padding="4,2"/>
+                            <TextBlock Text="{Binding CurrentModelText}"
+                                       FontSize="11" Opacity="0.5" VerticalAlignment="Center"
+                                       Margin="4,0,0,0"
+                                       IsVisible="{Binding CurrentModelText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                         </StackPanel>
                         <!-- Reasoning effort -->
                         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" Margin="12,0,0,0">
