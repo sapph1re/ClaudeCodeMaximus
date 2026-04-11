@@ -245,15 +245,19 @@
                                       MinWidth="90" MaxWidth="200"
                                       Padding="4,2"/>
                         </StackPanel>
-                        <!-- Model -->
+                        <!-- Model: current model as text + dropdown to change -->
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" Margin="12,0,0,0">
-                            <TextBlock Text="Model:" FontSize="11" Opacity="0.6" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding CurrentModelText}"
+                                       FontSize="11" FontWeight="SemiBold"
+                                       VerticalAlignment="Center"
+                                       ToolTip.Tip="Current model"/>
                             <ComboBox ItemsSource="{Binding AvailableModels}"
                                       SelectedIndex="{Binding SelectedModelIndex}"
                                       VerticalAlignment="Center"
                                       FontSize="11"
-                                      MinWidth="80"
-                                      Padding="4,2"/>
+                                      MinWidth="60"
+                                      Padding="4,2"
+                                      ToolTip.Tip="Change model"/>
                         </StackPanel>
                         <!-- Reasoning effort -->
                         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" Margin="12,0,0,0">

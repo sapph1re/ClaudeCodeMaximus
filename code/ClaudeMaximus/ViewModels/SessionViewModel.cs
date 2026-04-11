@@ -61,7 +61,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private bool _isProfileAuthInProgress;
 	private int _selectedDaemonProfileIndex;
 	private int _selectedEffortIndex;
-	private string _currentModelText = string.Empty;
+	private string _currentModelText = "Model";
 	private string _contextUsageText = string.Empty;
 	private string _sessionCostText = string.Empty;
 	private decimal _sessionTotalCost;
@@ -657,7 +657,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				{
 					Dispatcher.UIThread.Post(() =>
 					{
-						CurrentModelText = evt.Model!;
+						CurrentModelText = FormatModelName(evt.Model!);
 						// Update the "Default" entry in the model dropdown to show the actual model
 						if (AvailableModels.Count > 0 && _selectedModelIndex == 0)
 						{
@@ -1694,9 +1694,18 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				for (var i = 0; i < _daemonProfiles.Count; i++)
 				{
 					var p = _daemonProfiles[i];
-					var label = p.Auth is { LoggedIn: true, Email: not null }
-						? p.Auth.Email
-						: p.Name;
+					string label;
+					if (p.Auth is { LoggedIn: true, Email: not null })
+					{
+						var sub = p.Auth.SubscriptionType;
+						label = !string.IsNullOrEmpty(sub)
+							? $"{p.Auth.Email} ({char.ToUpperInvariant(sub[0])}{sub.Substring(1)})"
+							: p.Auth.Email;
+					}
+					else
+					{
+						label = p.Name;
+					}
 					DaemonProfileNames.Add(label);
 
 					if (savedProfile != null && p.Name == savedProfile)
