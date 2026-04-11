@@ -181,7 +181,9 @@ public partial class App : Application
 		try
 		{
 			var shell = Environment.GetEnvironmentVariable("SHELL") ?? "/bin/zsh";
-			var psi = new ProcessStartInfo(shell, "-l -c \"echo $PATH\"")
+			// -l (login) sources .zprofile; -i (interactive) sources .zshrc/.bashrc
+			// where nvm/fnm/volta typically initialize. Need both to get the full PATH.
+			var psi = new ProcessStartInfo(shell, "-l -i -c \"echo $PATH\"")
 			{
 				RedirectStandardOutput = true,
 				RedirectStandardError = true,
