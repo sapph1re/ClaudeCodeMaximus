@@ -234,8 +234,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		set => this.RaiseAndSetIfChanged(ref _isCommandBarVisible, value);
 	}
 
-	/// <summary>Display names for the model selector.</summary>
-	public static string[] AvailableModels { get; } = ["Default", "Opus", "Sonnet", "Haiku"];
+	/// <summary>Display names for the model selector. Index 0 is updated dynamically from run.system events.</summary>
+	public ObservableCollection<string> AvailableModels { get; } = new(["Default", "Opus", "Sonnet", "Haiku"]);
 
 	/// <summary>Model aliases passed to --model flag. Empty string means no flag. CLI resolves aliases to latest version.</summary>
 	private static readonly string[] ModelIds = ["", "opus", "sonnet", "haiku"];
@@ -654,7 +654,18 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				}
 				// Show actual model name in the status bar
 				if (!string.IsNullOrEmpty(evt.Model))
-					Dispatcher.UIThread.Post(() => CurrentModelText = evt.Model!);
+				{
+					Dispatcher.UIThread.Post(() =>
+					{
+						CurrentModelText = evt.Model!;
+						// Update the "Default" entry in the model dropdown to show the actual model
+						if (AvailableModels.Count > 0 && _selectedModelIndex == 0)
+						{
+							var friendly = FormatModelName(evt.Model!);
+							AvailableModels[0] = $"{friendly} (default)";
+						}
+					});
+				}
 				break;
 
 			case "delta" when evt.Delta != null:
@@ -1719,6 +1730,39 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		{
 			_log.Debug(ex, "Failed to load commands from daemon");
 		}
+	}
+
+	/// <summary>
+	/// Formats a raw model ID like "claude-opus-4-6[1m]" into a human-friendly name like "Opus 4.6 (1M)".
+	/// </summary>
+	private static string FormatModelName(string modelId)
+	{
+		// Strip "claude-" prefix
+		var s = modelId.StartsWith("claude-", StringComparison.OrdinalIgnoreCase)
+			? modelId.Substring(7) : modelId;
+
+		// Extract context window suffix like "[1m]"
+		string ctx = "";
+		var bracketIdx = s.IndexOf('[');
+		if (bracketIdx >= 0)
+		{
+			ctx = s.Substring(bracketIdx).Trim('[', ']').ToUpperInvariant();
+			s = s.Substring(0, bracketIdx);
+		}
+
+		// Parse "opus-4-6" → "Opus 4.6"
+		var parts = s.Split('-');
+		if (parts.Length >= 1)
+		{
+			var name = char.ToUpperInvariant(parts[0][0]) + parts[0].Substring(1);
+			var version = parts.Length >= 3
+				? $" {parts[1]}.{parts[2]}"
+				: parts.Length >= 2 ? $" {parts[1]}" : "";
+			var ctxSuffix = !string.IsNullOrEmpty(ctx) ? $" ({ctx})" : "";
+			return $"{name}{version}{ctxSuffix}";
+		}
+
+		return modelId;
 	}
 
 	private void UpdateSessionCost(decimal cost)
