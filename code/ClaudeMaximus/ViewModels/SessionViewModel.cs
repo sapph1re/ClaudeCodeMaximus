@@ -61,7 +61,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private bool _isProfileAuthInProgress;
 	private int _selectedDaemonProfileIndex;
 	private int _selectedEffortIndex;
-	private string _currentModelText = "Model";
+	private string _currentModelText = string.Empty;
 	private string _contextUsageText = string.Empty;
 	private string _sessionCostText = string.Empty;
 	private decimal _sessionTotalCost;
@@ -234,8 +234,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		set => this.RaiseAndSetIfChanged(ref _isCommandBarVisible, value);
 	}
 
-	/// <summary>Display names for the model selector. Index 0 is updated dynamically from run.system events.</summary>
-	public ObservableCollection<string> AvailableModels { get; } = new(["Default", "Opus", "Sonnet", "Haiku"]);
+	/// <summary>Display names for the model selector.</summary>
+	public static string[] AvailableModels { get; } = ["Default", "Opus", "Sonnet", "Haiku"];
 
 	/// <summary>Model aliases passed to --model flag. Empty string means no flag. CLI resolves aliases to latest version.</summary>
 	private static readonly string[] ModelIds = ["", "opus", "sonnet", "haiku"];
@@ -658,12 +658,6 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 					Dispatcher.UIThread.Post(() =>
 					{
 						CurrentModelText = FormatModelName(evt.Model!);
-						// Update the "Default" entry in the model dropdown to show the actual model
-						if (AvailableModels.Count > 0 && _selectedModelIndex == 0)
-						{
-							var friendly = FormatModelName(evt.Model!);
-							AvailableModels[0] = $"{friendly} (default)";
-						}
 					});
 				}
 				break;
@@ -1690,6 +1684,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				DaemonProfileNames.Clear();
 				var savedProfile = _appSettings.Settings.DaemonProfile;
 				var selectedIdx = 0;
+				var firstAuthIdx = -1;
 
 				for (var i = 0; i < _daemonProfiles.Count; i++)
 				{
@@ -1701,6 +1696,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 						label = !string.IsNullOrEmpty(sub)
 							? $"{p.Auth.Email} ({char.ToUpperInvariant(sub[0])}{sub.Substring(1)})"
 							: p.Auth.Email;
+						if (firstAuthIdx < 0) firstAuthIdx = i;
 					}
 					else
 					{
@@ -1710,9 +1706,11 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 					if (savedProfile != null && p.Name == savedProfile)
 						selectedIdx = i;
-					else if (savedProfile == null && p.IsDefault)
-						selectedIdx = i;
 				}
+
+				// If no saved preference, prefer the first authenticated profile
+				if (savedProfile == null && firstAuthIdx >= 0)
+					selectedIdx = firstAuthIdx;
 
 				_selectedDaemonProfileIndex = selectedIdx;
 				this.RaisePropertyChanged(nameof(SelectedDaemonProfileIndex));
@@ -1782,9 +1780,10 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 	private void UpdateContextUsage(int inputTokens)
 	{
-		// Rough display — we don't have the exact context limit from the daemon yet
-		if (inputTokens > 0)
-			ContextUsageText = $"ctx: {inputTokens / 1000.0:F0}k";
+		if (inputTokens <= 0) return;
+		ContextUsageText = inputTokens < 1000
+			? $"ctx: {inputTokens}"
+			: $"ctx: {inputTokens / 1000.0:F0}k";
 	}
 
 	private void SaveDraft(string text)

@@ -233,34 +233,43 @@
                         CornerRadius="4"
                         Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
                         x:CompileBindings="False">
-                    <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
-                        <!-- Profile -->
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
-                            <TextBlock Text="&#x1F464;" FontSize="11" VerticalAlignment="Center"
-                                       ToolTip.Tip="Account profile"/>
+                    <DockPanel>
+                        <!-- Right side: context + cost -->
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="{Binding ContextUsageText}"
+                                       FontSize="11" Opacity="0.5" VerticalAlignment="Center"
+                                       ToolTip.Tip="Context window usage"/>
+                            <TextBlock Text="{Binding SessionCostText}"
+                                       FontSize="11" Opacity="0.5" VerticalAlignment="Center"
+                                       ToolTip.Tip="Session cost"/>
+                        </StackPanel>
+                        <!-- Left side: profile · model · effort -->
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <!-- Profile selector -->
                             <ComboBox ItemsSource="{Binding DaemonProfileNames}"
                                       SelectedIndex="{Binding SelectedDaemonProfileIndex}"
                                       VerticalAlignment="Center"
                                       FontSize="11"
-                                      MinWidth="90" MaxWidth="200"
-                                      Padding="4,2"/>
-                        </StackPanel>
-                        <!-- Model: current model as text + dropdown to change -->
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" Margin="12,0,0,0">
+                                      MinWidth="100" MaxWidth="280"
+                                      Padding="4,2"
+                                      ToolTip.Tip="Account profile"/>
+                            <TextBlock Text="·" Opacity="0.3" VerticalAlignment="Center" Margin="4,0"/>
+                            <!-- Current model (bold, visible after first run.system event) -->
                             <TextBlock Text="{Binding CurrentModelText}"
                                        FontSize="11" FontWeight="SemiBold"
                                        VerticalAlignment="Center"
-                                       ToolTip.Tip="Current model"/>
+                                       ToolTip.Tip="Current model"
+                                       IsVisible="{Binding CurrentModelText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                            <!-- Model override selector -->
                             <ComboBox ItemsSource="{Binding AvailableModels}"
                                       SelectedIndex="{Binding SelectedModelIndex}"
                                       VerticalAlignment="Center"
                                       FontSize="11"
-                                      MinWidth="60"
+                                      MinWidth="70"
                                       Padding="4,2"
-                                      ToolTip.Tip="Change model"/>
-                        </StackPanel>
-                        <!-- Reasoning effort -->
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" Margin="12,0,0,0">
+                                      ToolTip.Tip="Override model for next message"/>
+                            <TextBlock Text="·" Opacity="0.3" VerticalAlignment="Center" Margin="4,0"/>
+                            <!-- Effort selector -->
                             <TextBlock Text="Effort:" FontSize="11" Opacity="0.6" VerticalAlignment="Center"/>
                             <ComboBox ItemsSource="{Binding AvailableEfforts}"
                                       SelectedIndex="{Binding SelectedEffortIndex}"
@@ -269,18 +278,7 @@
                                       MinWidth="70"
                                       Padding="4,2"/>
                         </StackPanel>
-                        <!-- Spacer -->
-                        <Border Grid.Column="3"/>
-                        <!-- Context + cost (right-aligned) -->
-                        <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="10">
-                            <TextBlock Text="{Binding ContextUsageText}"
-                                       FontSize="11" Opacity="0.5" VerticalAlignment="Center"
-                                       ToolTip.Tip="Context window usage"/>
-                            <TextBlock Text="{Binding SessionCostText}"
-                                       FontSize="11" Opacity="0.5" VerticalAlignment="Center"
-                                       ToolTip.Tip="Session cost"/>
-                        </StackPanel>
-                    </Grid>
+                    </DockPanel>
                 </Border>
             </Grid>
         </Border>
