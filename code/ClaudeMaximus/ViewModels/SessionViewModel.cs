@@ -60,7 +60,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private int _selectedProfileIndex;
 	private bool _isProfileAuthInProgress;
 	private int _selectedDaemonProfileIndex;
-	private int _selectedEffortIndex;
+	private int _selectedEffortIndex = 1; // 1 = Medium (CLI default)
 	private string _currentModelText = string.Empty;
 	private string _contextUsageText = string.Empty;
 	private string _sessionCostText = string.Empty;
@@ -326,9 +326,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	// --- Reasoning effort ---
 
 	/// <summary>Display names for reasoning effort selector.</summary>
-	public static string[] AvailableEfforts { get; } = ["Default", "Low", "Medium", "High"];
+	public static string[] AvailableEfforts { get; } = ["Low", "Medium", "High"];
 
-	private static readonly string[] EffortIds = ["", "low", "medium", "high"];
+	private static readonly string[] EffortIds = ["low", "medium", "high"];
 
 	public int SelectedEffortIndex
 	{
@@ -336,11 +336,11 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		set => this.RaiseAndSetIfChanged(ref _selectedEffortIndex, value);
 	}
 
-	/// <summary>Returns the reasoning effort for run.send, or null for default.</summary>
+	/// <summary>Returns the reasoning effort for run.send.</summary>
 	public string? SelectedReasoningEffort =>
-		_selectedEffortIndex > 0 && _selectedEffortIndex < EffortIds.Length
+		_selectedEffortIndex >= 0 && _selectedEffortIndex < EffortIds.Length
 			? EffortIds[_selectedEffortIndex]
-			: null;
+			: "medium";
 
 	/// <summary>Actual model name reported by the daemon in run.system events.</summary>
 	public string CurrentModelText

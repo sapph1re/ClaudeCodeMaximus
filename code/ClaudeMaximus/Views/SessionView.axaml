@@ -270,13 +270,14 @@
                                       ToolTip.Tip="Override model for next message"/>
                             <TextBlock Text="·" Opacity="0.3" VerticalAlignment="Center" Margin="4,0"/>
                             <!-- Effort selector -->
-                            <TextBlock Text="Effort:" FontSize="11" Opacity="0.6" VerticalAlignment="Center"/>
+                            <TextBlock Text="Effort:" FontSize="11" Opacity="0.5" VerticalAlignment="Center"/>
                             <ComboBox ItemsSource="{Binding AvailableEfforts}"
                                       SelectedIndex="{Binding SelectedEffortIndex}"
                                       VerticalAlignment="Center"
                                       FontSize="11"
                                       MinWidth="70"
-                                      Padding="4,2"/>
+                                      Padding="4,2"
+                                      ToolTip.Tip="Reasoning effort level"/>
                         </StackPanel>
                     </DockPanel>
                 </Border>
