@@ -569,13 +569,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_node.LastPromptTime = now.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
 		_node.LastPromptTimestamp = now;
 
-		Messages.Add(new MessageEntryViewModel
-		{
-			Role       = Constants.SessionFile.RoleSystem,
-			Content    = "Claude is thinking...",
-			Timestamp  = DateTimeOffset.UtcNow,
-			IsProgress = true,
-		});
+		// The dedicated thinking indicator (Row 2 in AXAML) with timer
+		// already shows "Claude is thinking... 0:16" — no need for a
+		// duplicate progress bubble in the message list.
 
 		try
 		{
