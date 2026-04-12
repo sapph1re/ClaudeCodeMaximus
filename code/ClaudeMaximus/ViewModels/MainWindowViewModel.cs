@@ -160,6 +160,16 @@ public sealed class MainWindowViewModel : ViewModelBase
 		set { if (ActiveSession is not null) ActiveSession.IsAutoCommit = value; }
 	}
 
+	public int AutoCommitState
+	{
+		get => ActiveSession?.AutoCommitState ?? 1;
+		set { if (ActiveSession is not null) ActiveSession.AutoCommitState = value; }
+	}
+
+	public string AutoCommitLabel => ActiveSession?.AutoCommitLabel ?? "\u2713 Commit";
+
+	public ReactiveCommand<Unit, Unit> CycleAutoCommitCommand { get; }
+
 	public bool IsNewBranch
 	{
 		get => ActiveSession?.IsNewBranch ?? false;
@@ -222,6 +232,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 		ToggleTreePanelCommand = ReactiveCommand.Create(() => { IsTreePanelVisible = !IsTreePanelVisible; });
 		ToggleThemeCommand     = ReactiveCommand.Create(() => { IsDarkTheme = !IsDarkTheme; });
 		ClearSessionCommand    = ReactiveCommand.Create(() => { ActiveSession?.ClearCommand.Execute().Subscribe(); });
+		CycleAutoCommitCommand = ReactiveCommand.Create(() => { ActiveSession?.CycleAutoCommitCommand.Execute().Subscribe(); this.RaisePropertyChanged(nameof(AutoCommitLabel)); this.RaisePropertyChanged(nameof(AutoCommitState)); });
 
 		// Repair session files corrupted by the auto-compaction bug (one-time on startup)
 		var repaired = fileService.RepairCorruptedCompactions();
@@ -308,6 +319,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 	{
 		this.RaisePropertyChanged(nameof(HasActiveSession));
 		this.RaisePropertyChanged(nameof(IsAutoCommit));
+		this.RaisePropertyChanged(nameof(AutoCommitState));
+		this.RaisePropertyChanged(nameof(AutoCommitLabel));
 		this.RaisePropertyChanged(nameof(IsNewBranch));
 		this.RaisePropertyChanged(nameof(IsAutoDocument));
 		this.RaisePropertyChanged(nameof(IsAutoCompact));
