@@ -450,6 +450,27 @@ public partial class SessionView : UserControl
 		}
 	}
 
+	private async void OnCopyToolResultClick(object? sender, RoutedEventArgs e)
+	{
+		if (sender is Button { Tag: string content } && !string.IsNullOrEmpty(content))
+		{
+			var topLevel = TopLevel.GetTopLevel(this);
+			if (topLevel?.Clipboard != null)
+			{
+				await topLevel.Clipboard.SetTextAsync(content);
+				// Brief visual feedback
+				if (sender is Button btn)
+				{
+					var original = btn.Content;
+					btn.Content = "Copied!";
+					await System.Threading.Tasks.Task.Delay(1000);
+					btn.Content = original;
+				}
+			}
+		}
+		e.Handled = true; // prevent toggle
+	}
+
 	private void OnThinkingBlockTapped(object? sender, TappedEventArgs e)
 	{
 		if (sender is Avalonia.Controls.Control { DataContext: ThinkingBlockViewModel th })

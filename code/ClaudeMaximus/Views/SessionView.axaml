@@ -157,14 +157,22 @@
                                                                            VerticalAlignment="Center"
                                                                            Margin="4,0,0,0"/>
                                                             </StackPanel>
-                                                            <!-- Expanded result content -->
-                                                            <TextBlock Text="{Binding ResultContent}"
-                                                                       IsVisible="{Binding IsExpanded}"
-                                                                       TextWrapping="Wrap"
-                                                                       FontSize="11" Opacity="0.7"
-                                                                       MaxHeight="300"
-                                                                       FontFamily="Cascadia Code,Consolas,monospace"
-                                                                       Margin="22,2,0,0"/>
+                                                            <!-- Expanded result content + copy button -->
+                                                            <Grid IsVisible="{Binding IsExpanded}" Margin="22,2,0,0">
+                                                                <TextBlock Text="{Binding ResultContent}"
+                                                                           TextWrapping="Wrap"
+                                                                           FontSize="11" Opacity="0.7"
+                                                                           MaxHeight="300"
+                                                                           FontFamily="Cascadia Code,Consolas,monospace"/>
+                                                                <Button Content="Copy"
+                                                                        HorizontalAlignment="Right"
+                                                                        VerticalAlignment="Top"
+                                                                        FontSize="10" Padding="6,2"
+                                                                        Opacity="0.5"
+                                                                        Click="OnCopyToolResultClick"
+                                                                        Tag="{Binding ResultContent}"
+                                                                        ToolTip.Tip="Copy output to clipboard"/>
+                                                            </Grid>
                                                         </StackPanel>
                                                     </Border>
                                                 </DataTemplate>
