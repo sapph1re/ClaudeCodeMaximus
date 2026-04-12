@@ -165,7 +165,7 @@
                     IsVisible="{Binding IsBusy}"
                     Margin="8,3,8,3"
                     Spacing="6">
-            <TextBlock Text="Claude is thinking…"
+            <TextBlock Text="{Binding ThinkingStatusText}"
                        FontStyle="Italic"
                        Opacity="0.5"
                        FontSize="13"/>

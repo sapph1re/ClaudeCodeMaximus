@@ -669,6 +669,22 @@ public sealed class TessynDaemonService : ITessynDaemonService
         return await SendRpcAsync<TessynProfileAuthInfo>("auth.status", p.Count > 0 ? p : null, cancellationToken);
     }
 
+    // --- MCP ---
+
+    public async Task<JsonElement> McpListAsync(string externalId, CancellationToken cancellationToken)
+    {
+        return await SendRpcAsync<JsonElement>("mcp.list", new { externalId }, cancellationToken);
+    }
+
+    // --- Usage ---
+
+    public async Task<JsonElement> UsageGetAsync(string? profile, CancellationToken cancellationToken)
+    {
+        var p = new Dictionary<string, object?>();
+        if (profile != null) p["profile"] = profile;
+        return await SendRpcAsync<JsonElement>("usage.get", p.Count > 0 ? p : null, cancellationToken);
+    }
+
     // --- Daemon management ---
 
     public async Task<TessynReindexResult> ReindexAsync(CancellationToken cancellationToken)

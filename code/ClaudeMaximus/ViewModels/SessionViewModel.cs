@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reactive;
 using System.Reactive.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
@@ -41,6 +42,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private bool _isBusy;
 	private bool _isMarkdownMode = true;
 	private string _thinkingDuration = string.Empty;
+	private string _thinkingStatusText = "Claude is thinking\u2026";
 	private DispatcherTimer? _thinkingTimer;
 	private DateTimeOffset _thinkingStartedAt;
 	private int _busyCount;
@@ -97,6 +99,12 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	{
 		get => _thinkingDuration;
 		private set => this.RaiseAndSetIfChanged(ref _thinkingDuration, value);
+	}
+
+	public string ThinkingStatusText
+	{
+		get => _thinkingStatusText;
+		private set => this.RaiseAndSetIfChanged(ref _thinkingStatusText, value);
 	}
 
 	public bool IsMarkdownMode
@@ -637,6 +645,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				_thinkingTimer = null;
 				t?.Stop();
 				ThinkingDuration = string.Empty;
+				ThinkingStatusText = "Claude is thinking\u2026";
 				IsBusy = false;
 				_node.IsRunning = false;
 			}
@@ -701,6 +710,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			case "block_start" when evt.BlockType == "tool_use":
 				Dispatcher.UIThread.Post(() =>
 				{
+					ThinkingStatusText = $"Running: {evt.ToolName ?? "tool"}\u2026";
 					Messages.Add(new MessageEntryViewModel
 					{
 						Role       = Constants.SessionFile.RoleSystem,
@@ -717,6 +727,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				{
 					Dispatcher.UIThread.Post(() =>
 					{
+						ThinkingStatusText = "Claude is responding\u2026";
+
 						// Remove progress messages
 						var last = Messages.Count > 0 ? Messages[^1] : null;
 						if (last?.Role == Constants.SessionFile.RoleSystem && last.IsProgress)
@@ -922,6 +934,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				_thinkingTimer = null;
 				t?.Stop();
 				ThinkingDuration = string.Empty;
+				ThinkingStatusText = "Claude is thinking\u2026";
 				IsBusy = false;
 				_node.IsRunning = false;
 			}
@@ -1261,6 +1274,20 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				return;
 			}
 
+			if (cmdLower == "/mcp")
+			{
+				InputText = string.Empty;
+				await HandleMcpCommandAsync();
+				return;
+			}
+
+			if (cmdLower == "/usage")
+			{
+				InputText = string.Empty;
+				await HandleUsageCommandAsync();
+				return;
+			}
+
 			// Skills and API-bound commands go to daemon
 			if (UseDaemon)
 			{
@@ -1418,6 +1445,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				_thinkingTimer = null;
 				t?.Stop();
 				ThinkingDuration = string.Empty;
+				ThinkingStatusText = "Claude is thinking\u2026";
 				IsBusy = false;
 				_node.IsRunning = false;
 			}
@@ -1787,6 +1815,171 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			Dispatcher.UIThread.Post(() =>
 				statusMsg.Content = $"Failed to launch authentication: {ex.Message}");
 		}
+	}
+
+	private async System.Threading.Tasks.Task HandleMcpCommandAsync()
+	{
+		var externalId = _node.ExternalId;
+		if (string.IsNullOrEmpty(externalId))
+		{
+			Messages.Add(new MessageEntryViewModel
+			{
+				Role      = Constants.SessionFile.RoleSystem,
+				Content   = "/mcp\nSend a message first to initialize MCP servers.",
+				Timestamp = DateTimeOffset.UtcNow,
+			});
+			return;
+		}
+
+		if (_daemonService == null)
+		{
+			Messages.Add(new MessageEntryViewModel
+			{
+				Role      = Constants.SessionFile.RoleSystem,
+				Content   = "/mcp\nDaemon not connected.",
+				Timestamp = DateTimeOffset.UtcNow,
+			});
+			return;
+		}
+
+		try
+		{
+			var result = await _daemonService.McpListAsync(externalId);
+			var sb = new StringBuilder();
+			sb.AppendLine("/mcp");
+			sb.AppendLine("MCP Servers:");
+
+			if (result.TryGetProperty("servers", out var servers) && servers.ValueKind == JsonValueKind.Array)
+			{
+				foreach (var server in servers.EnumerateArray())
+				{
+					var name = server.TryGetProperty("name", out var n) ? n.GetString() ?? "unknown" : "unknown";
+					var status = server.TryGetProperty("status", out var s) ? s.GetString() ?? "unknown" : "unknown";
+					var toolCount = server.TryGetProperty("toolCount", out var tc) ? tc.GetInt32() : 0;
+
+					var indicator = status switch
+					{
+						"connected" => "\u25cf",
+						"error" => "\u2717",
+						_ => "\u25cb",
+					};
+
+					sb.AppendLine($"  {indicator} {name,-28} {status,-12} ({toolCount} tools)");
+				}
+			}
+			else
+			{
+				sb.AppendLine("  No MCP servers configured.");
+			}
+
+			Messages.Add(new MessageEntryViewModel
+			{
+				Role      = Constants.SessionFile.RoleSystem,
+				Content   = sb.ToString().TrimEnd(),
+				Timestamp = DateTimeOffset.UtcNow,
+			});
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "Failed to get MCP list");
+			Messages.Add(new MessageEntryViewModel
+			{
+				Role      = Constants.SessionFile.RoleSystem,
+				Content   = $"/mcp\nFailed to get MCP list: {ex.Message}",
+				Timestamp = DateTimeOffset.UtcNow,
+			});
+		}
+	}
+
+	private async System.Threading.Tasks.Task HandleUsageCommandAsync()
+	{
+		if (_daemonService == null)
+		{
+			Messages.Add(new MessageEntryViewModel
+			{
+				Role      = Constants.SessionFile.RoleSystem,
+				Content   = "/usage\nDaemon not connected.",
+				Timestamp = DateTimeOffset.UtcNow,
+			});
+			return;
+		}
+
+		try
+		{
+			var profile = SelectedDaemonProfile ?? "default";
+			var result = await _daemonService.UsageGetAsync(SelectedDaemonProfile);
+			var sb = new StringBuilder();
+			sb.AppendLine("/usage");
+
+			// Rate limit info
+			if (result.TryGetProperty("rateLimit", out var rl) && rl.ValueKind == JsonValueKind.Object)
+			{
+				var window = rl.TryGetProperty("window", out var w) ? w.GetString() ?? "unknown" : "unknown";
+				var allowed = rl.TryGetProperty("allowed", out var a) && a.GetBoolean();
+				var resetsAt = rl.TryGetProperty("resetsAt", out var ra) ? ra.GetString() : null;
+
+				var resetText = "";
+				if (resetsAt != null && DateTimeOffset.TryParse(resetsAt, out var resetTime))
+				{
+					var remaining = resetTime - DateTimeOffset.UtcNow;
+					if (remaining.TotalSeconds > 0)
+					{
+						resetText = remaining.TotalHours >= 1
+							? $", resets in {(int)remaining.TotalHours}h {remaining.Minutes:D2}m"
+							: $", resets in {remaining.Minutes}m {remaining.Seconds:D2}s";
+					}
+				}
+
+				sb.AppendLine($"Rate limit: {window}, {(allowed ? "allowed" : "limited")}{resetText}");
+			}
+
+			// Token usage
+			if (result.TryGetProperty("tokens", out var tok) && tok.ValueKind == JsonValueKind.Object)
+			{
+				var input = tok.TryGetProperty("input", out var ti) ? ti.GetInt64() : 0;
+				var output = tok.TryGetProperty("output", out var to) ? to.GetInt64() : 0;
+				var cacheRead = tok.TryGetProperty("cacheRead", out var cr) ? cr.GetInt64() : 0;
+				var cacheCreated = tok.TryGetProperty("cacheCreated", out var cc) ? cc.GetInt64() : 0;
+
+				var parts = new List<string>();
+				if (cacheRead > 0) parts.Add($"{FormatTokenCount(cacheRead)} cache read");
+				if (cacheCreated > 0) parts.Add($"{FormatTokenCount(cacheCreated)} cache created");
+				var cacheInfo = parts.Count > 0 ? $" ({string.Join(", ", parts)})" : "";
+
+				sb.AppendLine($"Tokens: {FormatTokenCount(input)} in / {FormatTokenCount(output)} out{cacheInfo}");
+			}
+
+			// Cost
+			if (result.TryGetProperty("cost", out var cost))
+			{
+				var costValue = cost.GetDecimal();
+				sb.AppendLine($"Cost: ${costValue:F4}");
+			}
+
+			Messages.Add(new MessageEntryViewModel
+			{
+				Role      = Constants.SessionFile.RoleSystem,
+				Content   = sb.ToString().TrimEnd(),
+				Timestamp = DateTimeOffset.UtcNow,
+			});
+		}
+		catch (Exception ex)
+		{
+			_log.Warning(ex, "Failed to get usage info");
+			Messages.Add(new MessageEntryViewModel
+			{
+				Role      = Constants.SessionFile.RoleSystem,
+				Content   = $"/usage\nFailed to get usage info: {ex.Message}",
+				Timestamp = DateTimeOffset.UtcNow,
+			});
+		}
+	}
+
+	private static string FormatTokenCount(long tokens)
+	{
+		if (tokens >= 1_000_000) return $"{tokens / 1_000_000.0:F1}M";
+		if (tokens >= 1_000) return $"{tokens / 1_000.0:F1}k";
+		return tokens.ToString();
 	}
 
 	/// <summary>Launch auth login for an unauthenticated daemon profile, then reload profiles.</summary>

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClaudeMaximus.Models;
@@ -148,6 +149,16 @@ public interface ITessynDaemonService : IDisposable
     Task ProfilesAddAsync(string name, string configDir, CancellationToken cancellationToken = default);
 
     Task<TessynProfileAuthInfo> AuthStatusAsync(string? profile = null, CancellationToken cancellationToken = default);
+
+    // --- MCP ---
+
+    /// <summary>List MCP servers and their status for a session.</summary>
+    Task<JsonElement> McpListAsync(string externalId, CancellationToken cancellationToken = default);
+
+    // --- Usage ---
+
+    /// <summary>Get usage/rate-limit info for a profile.</summary>
+    Task<JsonElement> UsageGetAsync(string? profile, CancellationToken cancellationToken = default);
 
     // --- Daemon management ---
 
