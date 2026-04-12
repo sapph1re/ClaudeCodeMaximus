@@ -769,8 +769,13 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 					if (blockIdx >= 0 && _activeBlocks.TryGetValue(blockIdx, out var stoppedBlock))
 					{
 						stoppedBlock.IsStreaming = false;
-						if (stoppedBlock is ToolUseBlockViewModel tu && tu.StatusIcon == "⟳")
-							tu.Complete(); // Mark success if not already failed
+						if (stoppedBlock is ToolUseBlockViewModel tu)
+						{
+							if (evt.IsError == true)
+								tu.Fail(evt.ToolResult);
+							else
+								tu.Complete(evt.ToolResult);
+						}
 						if (stoppedBlock is ThinkingBlockViewModel th)
 							th.IsExpanded = false; // Auto-collapse thinking when done
 					}
@@ -779,10 +784,12 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				});
 				break;
 
+			case "message" when evt.Role == "assistant" && evt.RawContent != null:
+				// Extract tool input from the full message content blocks
+				Dispatcher.UIThread.Post(() => ParseToolInputsFromMessage(evt.RawContent));
+				break;
+
 			case "message":
-				// Full message received — used for reconnect catch-up.
-				// Could contain tool_result content we haven't seen via deltas.
-				// For now, no action — block_start/delta/block_stop handle live streaming.
 				break;
 
 			case "completed":
@@ -884,6 +891,49 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 						});
 				});
 				break;
+		}
+	}
+
+	/// <summary>
+	/// Parse tool_use content blocks from a run.message event to extract tool inputs.
+	/// Updates existing ToolUseBlockViewModels with the input summary.
+	/// </summary>
+	private void ParseToolInputsFromMessage(string rawContentJson)
+	{
+		try
+		{
+			using var doc = System.Text.Json.JsonDocument.Parse(rawContentJson);
+			foreach (var block in doc.RootElement.EnumerateArray())
+			{
+				if (block.TryGetProperty("type", out var typeEl) && typeEl.GetString() == "tool_use"
+					&& block.TryGetProperty("name", out var nameEl)
+					&& block.TryGetProperty("input", out var inputEl))
+				{
+					var toolName = nameEl.GetString() ?? "";
+					var inputJson = inputEl.GetRawText();
+
+					// Find the matching ToolUseBlockViewModel (by tool name, since we may not have a direct index match)
+					foreach (var tracked in _activeBlocks.Values)
+					{
+						if (tracked is ToolUseBlockViewModel tu
+							&& tu.ToolName == toolName
+							&& string.IsNullOrEmpty(tu.InputSummary))
+						{
+							var summary = ToolUseBlockViewModel.SummarizeInput(toolName, inputJson);
+							if (!string.IsNullOrEmpty(summary))
+							{
+								tu.InputSummary = summary;
+								tu.FullInput = inputJson;
+							}
+							break;
+						}
+					}
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			_log.Debug(ex, "Failed to parse tool inputs from run.message");
 		}
 	}
 

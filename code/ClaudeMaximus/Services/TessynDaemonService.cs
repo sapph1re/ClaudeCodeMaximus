@@ -338,6 +338,10 @@ public sealed class TessynDaemonService : ITessynDaemonService
                 BlockIndex = paramsElement.TryGetProperty("blockIndex", out var bi) ? bi.GetInt32() : null,
                 ToolName = paramsElement.TryGetProperty("toolName", out var tn) ? tn.GetString() : null,
                 ToolInput = paramsElement.TryGetProperty("toolInput", out var ti) ? ti.ToString() : null,
+                ToolResult = paramsElement.TryGetProperty("toolResult", out var tr) ? tr.GetString() : null,
+                IsError = paramsElement.TryGetProperty("isError", out var ie) ? ie.GetBoolean() : null,
+                RawContent = paramsElement.TryGetProperty("content", out var rc) && rc.ValueKind == JsonValueKind.Array
+                    ? rc.GetRawText() : null,
                 Role = paramsElement.TryGetProperty("role", out var rl) ? rl.GetString() : null,
                 StopReason = paramsElement.TryGetProperty("stopReason", out var sr) ? sr.GetString() : null,
                 Error = paramsElement.TryGetProperty("error", out var err) ? err.GetString() : null,

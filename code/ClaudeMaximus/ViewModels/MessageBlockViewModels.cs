@@ -78,11 +78,17 @@ public sealed class ToolUseBlockViewModel : MessageBlockViewModel
 
     public string ToolName { get; init; } = "unknown";
 
+    private string _inputSummary = string.Empty;
+
     /// <summary>Input summary (e.g. file path for Read, command for Bash).</summary>
-    public string InputSummary { get; init; } = string.Empty;
+    public string InputSummary
+    {
+        get => _inputSummary;
+        set => this.RaiseAndSetIfChanged(ref _inputSummary, value);
+    }
 
     /// <summary>Full input as JSON string, shown when expanded.</summary>
-    public string? FullInput { get; init; }
+    public string? FullInput { get; set; }
 
     /// <summary>Status icon: ⟳ running, ✓ success, ✗ error.</summary>
     public string StatusIcon

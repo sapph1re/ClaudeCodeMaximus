@@ -41,6 +41,15 @@ public sealed class TessynRunEvent
     /// <summary>Tool input as JSON string. Present on "block_start" when BlockType is "tool_use".</summary>
     public string? ToolInput { get; init; }
 
+    /// <summary>Tool output text. Present on "block_stop" for tool_use blocks (daemon v0.4.3+).</summary>
+    public string? ToolResult { get; init; }
+
+    /// <summary>Whether the tool call failed. Present on "block_stop" for tool_use blocks.</summary>
+    public bool? IsError { get; init; }
+
+    /// <summary>Raw content blocks from run.message events. Used to extract tool inputs.</summary>
+    public string? RawContent { get; init; }
+
     /// <summary>Message role. Present on "message" events.</summary>
     public string? Role { get; init; }
 
