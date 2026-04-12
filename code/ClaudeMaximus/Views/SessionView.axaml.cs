@@ -435,4 +435,36 @@ public partial class SessionView : UserControl
 		}
 		return null;
 	}
+
+	// =====================================================================
+	// Tool / Thinking block expand/collapse
+	// =====================================================================
+
+	private void OnToolBlockTapped(object? sender, TappedEventArgs e)
+	{
+		if (sender is Avalonia.Controls.Control { DataContext: ToolUseBlockViewModel tu })
+		{
+			// Only expand if there's content to show
+			if (!string.IsNullOrEmpty(tu.ResultContent))
+				tu.IsExpanded = !tu.IsExpanded;
+		}
+	}
+
+	private void OnThinkingBlockTapped(object? sender, TappedEventArgs e)
+	{
+		if (sender is Avalonia.Controls.Control { DataContext: ThinkingBlockViewModel th })
+			th.IsExpanded = !th.IsExpanded;
+	}
+}
+
+/// <summary>Converts bool to ▼ (expanded) or ▶ (collapsed) arrow indicator.</summary>
+public sealed class BoolToArrowConverter : Avalonia.Data.Converters.IValueConverter
+{
+	public static readonly BoolToArrowConverter Instance = new();
+
+	public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+		=> value is true ? "▼" : "▶";
+
+	public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+		=> throw new NotSupportedException();
 }
