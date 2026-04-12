@@ -38,6 +38,9 @@ public sealed class TessynRunEvent
     /// <summary>Tool name for tool_use blocks. Present on "block_start" when BlockType is "tool_use".</summary>
     public string? ToolName { get; init; }
 
+    /// <summary>Tool input as JSON string. Present on "block_start" when BlockType is "tool_use".</summary>
+    public string? ToolInput { get; init; }
+
     /// <summary>Message role. Present on "message" events.</summary>
     public string? Role { get; init; }
 

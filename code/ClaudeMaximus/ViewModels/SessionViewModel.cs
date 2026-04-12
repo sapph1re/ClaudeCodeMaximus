@@ -34,6 +34,8 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private readonly ITessynDaemonService? _daemonService;
 	private IDisposable? _runEventSubscription;
 	private string? _activeRunId;
+	private MessageEntryViewModel? _currentAssistantMessage;
+	private readonly Dictionary<int, MessageBlockViewModel> _activeBlocks = new();
 	private bool _daemonPendingClear;
 	private bool _daemonPendingAutoCompact;
 	private CancellationTokenSource? _draftSaveCts;
@@ -688,22 +690,20 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			case "delta" when evt.Delta != null:
 				Dispatcher.UIThread.Post(() =>
 				{
-					// Remove "thinking" progress message and start accumulating assistant text
-					var last = Messages.Count > 0 ? Messages[^1] : null;
-					if (last?.Role == Constants.SessionFile.RoleSystem && last.IsProgress)
-						Messages.RemoveAt(Messages.Count - 1);
+					EnsureCurrentAssistantMessage();
 
-					// Append to existing assistant message or create new one
-					last = Messages.Count > 0 ? Messages[^1] : null;
-					if (last?.Role == Constants.SessionFile.RoleAssistant)
-						last.Content += evt.Delta;
+					var blockIdx = evt.BlockIndex ?? -1;
+					if (blockIdx >= 0 && _activeBlocks.TryGetValue(blockIdx, out var block))
+					{
+						// Append to the specific block
+						if (block is TextBlockViewModel tb) tb.AppendText(evt.Delta);
+						else if (block is ThinkingBlockViewModel thb) thb.AppendText(evt.Delta);
+					}
 					else
-						Messages.Add(new MessageEntryViewModel
-						{
-							Role      = Constants.SessionFile.RoleAssistant,
-							Content   = evt.Delta,
-							Timestamp = DateTimeOffset.UtcNow,
-						});
+					{
+						// No block tracked — fallback: append to Content directly
+						_currentAssistantMessage!.Content += evt.Delta;
+					}
 				});
 				break;
 
@@ -711,62 +711,88 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				Dispatcher.UIThread.Post(() =>
 				{
 					ThinkingStatusText = $"Running: {evt.ToolName ?? "tool"}\u2026";
-					Messages.Add(new MessageEntryViewModel
+					EnsureCurrentAssistantMessage();
+
+					var toolBlock = new ToolUseBlockViewModel
 					{
-						Role       = Constants.SessionFile.RoleSystem,
-						Content    = $"Using tool: {evt.ToolName ?? "unknown"}",
-						Timestamp  = DateTimeOffset.UtcNow,
-						IsProgress = true,
-					});
+						BlockIndex = evt.BlockIndex ?? -1,
+						ToolName = evt.ToolName ?? "unknown",
+						InputSummary = ToolUseBlockViewModel.SummarizeInput(evt.ToolName ?? "", evt.ToolInput),
+						FullInput = evt.ToolInput,
+						IsStreaming = true,
+					};
+					if (evt.BlockIndex.HasValue)
+						_activeBlocks[evt.BlockIndex.Value] = toolBlock;
+					_currentAssistantMessage!.Blocks.Add(toolBlock);
+					this.RaisePropertyChanged(nameof(_currentAssistantMessage.HasBlocks));
 				});
 				break;
 
-			case "block_start":
-				// Non-tool content blocks (text, thinking) — start new assistant message
-				if (evt.BlockType == "text")
+			case "block_start" when evt.BlockType == "thinking":
+				Dispatcher.UIThread.Post(() =>
 				{
-					Dispatcher.UIThread.Post(() =>
+					EnsureCurrentAssistantMessage();
+
+					var thinkBlock = new ThinkingBlockViewModel
 					{
-						ThinkingStatusText = "Claude is responding\u2026";
+						BlockIndex = evt.BlockIndex ?? -1,
+						IsStreaming = true,
+						IsExpanded = true, // expanded while streaming
+					};
+					if (evt.BlockIndex.HasValue)
+						_activeBlocks[evt.BlockIndex.Value] = thinkBlock;
+					_currentAssistantMessage!.Blocks.Add(thinkBlock);
+				});
+				break;
 
-						// Remove progress messages
-						var last = Messages.Count > 0 ? Messages[^1] : null;
-						if (last?.Role == Constants.SessionFile.RoleSystem && last.IsProgress)
-							Messages.RemoveAt(Messages.Count - 1);
+			case "block_start" when evt.BlockType == "text":
+				Dispatcher.UIThread.Post(() =>
+				{
+					ThinkingStatusText = "Claude is responding\u2026";
+					EnsureCurrentAssistantMessage();
 
-						Messages.Add(new MessageEntryViewModel
-						{
-							Role      = Constants.SessionFile.RoleAssistant,
-							Content   = string.Empty,
-							Timestamp = DateTimeOffset.UtcNow,
-						});
-					});
-				}
+					var textBlock = new TextBlockViewModel
+					{
+						BlockIndex = evt.BlockIndex ?? -1,
+						IsStreaming = true,
+					};
+					if (evt.BlockIndex.HasValue)
+						_activeBlocks[evt.BlockIndex.Value] = textBlock;
+					_currentAssistantMessage!.Blocks.Add(textBlock);
+				});
 				break;
 
 			case "block_stop":
-				// Content block ended — remove tool progress for tool_use blocks
 				Dispatcher.UIThread.Post(() =>
 				{
-					for (var i = Messages.Count - 1; i >= 0; i--)
+					var blockIdx = evt.BlockIndex ?? -1;
+					if (blockIdx >= 0 && _activeBlocks.TryGetValue(blockIdx, out var stoppedBlock))
 					{
-						if (Messages[i].IsProgress && Messages[i].Content.StartsWith("Using tool:"))
-						{
-							Messages.RemoveAt(i);
-							break;
-						}
+						stoppedBlock.IsStreaming = false;
+						if (stoppedBlock is ToolUseBlockViewModel tu && tu.StatusIcon == "⟳")
+							tu.Complete(); // Mark success if not already failed
+						if (stoppedBlock is ThinkingBlockViewModel th)
+							th.IsExpanded = false; // Auto-collapse thinking when done
 					}
+					// Sync Content for search
+					_currentAssistantMessage?.SyncContentFromBlocks();
 				});
 				break;
 
 			case "message":
-				// Full message received — used for reconnect catch-up, no action needed
-				// during normal streaming since we accumulate via deltas
+				// Full message received — used for reconnect catch-up.
+				// Could contain tool_result content we haven't seen via deltas.
+				// For now, no action — block_start/delta/block_stop handle live streaming.
 				break;
 
 			case "completed":
 				Dispatcher.UIThread.Post(() =>
 				{
+					// Clean up block tracking
+					_activeBlocks.Clear();
+					_currentAssistantMessage?.SyncContentFromBlocks();
+					_currentAssistantMessage = null;
+
 					// Remove any remaining progress messages
 					for (var i = Messages.Count - 1; i >= 0; i--)
 						if (Messages[i].IsProgress) Messages.RemoveAt(i);
@@ -859,6 +885,34 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				});
 				break;
 		}
+	}
+
+	/// <summary>
+	/// Ensures there's a current assistant message to add blocks to.
+	/// Creates one if the last message isn't an assistant message.
+	/// </summary>
+	private void EnsureCurrentAssistantMessage()
+	{
+		if (_currentAssistantMessage != null) return;
+
+		var last = Messages.Count > 0 ? Messages[^1] : null;
+		if (last is { IsAssistant: true })
+		{
+			_currentAssistantMessage = last;
+			return;
+		}
+
+		// Remove trailing progress messages
+		while (Messages.Count > 0 && Messages[^1].IsProgress)
+			Messages.RemoveAt(Messages.Count - 1);
+
+		_currentAssistantMessage = new MessageEntryViewModel
+		{
+			Role = Constants.SessionFile.RoleAssistant,
+			Content = string.Empty,
+			Timestamp = DateTimeOffset.UtcNow,
+		};
+		Messages.Add(_currentAssistantMessage);
 	}
 
 	private void FinishDaemonRun(bool success)
