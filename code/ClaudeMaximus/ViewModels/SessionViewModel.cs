@@ -52,6 +52,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 	private bool _pendingClear;
 	private bool _isNewBranch;
 	private bool _isAutoCompact;
+	private int _autoCommitState = 1; // 1=on, -1=off, 0=neutral
 	private bool _midRunAutoCompactState;
 	private DispatcherTimer? _draftDebounceTimer;
 	private bool _isCommandBarVisible;
@@ -131,6 +132,42 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 					Constants.Instructions.MidRunAutoCommitOff);
 		}
 	}
+
+	/// <summary>Ternary auto-commit state: 1=on, -1=off, 0=neutral. Cycles ON→OFF→Neutral→ON.</summary>
+	public int AutoCommitState
+	{
+		get => _autoCommitState;
+		set
+		{
+			var oldValue = _autoCommitState;
+			this.RaiseAndSetIfChanged(ref _autoCommitState, value);
+			// Sync the bool model for backward compat
+			_node.Model.IsAutoCommit = value > 0;
+			_appSettings.Save();
+			this.RaisePropertyChanged(nameof(AutoCommitLabel));
+			if (IsBusy && value != oldValue)
+			{
+				if (value > 0)
+					SendMidRunToggleCorrection("AutoCommit", true,
+						Constants.Instructions.MidRunAutoCommitOn,
+						Constants.Instructions.MidRunAutoCommitOff);
+				else if (value < 0)
+					SendMidRunToggleCorrection("AutoCommit", false,
+						Constants.Instructions.MidRunAutoCommitOn,
+						Constants.Instructions.MidRunAutoCommitOff);
+				// neutral: no mid-run correction needed
+			}
+		}
+	}
+
+	public string AutoCommitLabel => _autoCommitState switch
+	{
+		1 => "\u2713 Commit",
+		-1 => "\u2717 No commit",
+		_ => "\u2014 Commit",
+	};
+
+	public ReactiveCommand<Unit, Unit> CycleAutoCommitCommand { get; }
 
 	/// <summary>One-shot toggle (FR.11.4). Auto-resets after prompt sent.</summary>
 	public bool IsNewBranch
@@ -430,6 +467,7 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		_runService       = runService;
 		_daemonService    = daemonService;
 		_name             = node.Name;
+		_autoCommitState  = node.Model.IsAutoCommit ? 1 : -1;
 		_selectedModelIndex = Math.Clamp(appSettings.Settings.SelectedModelIndex, 0, ModelIds.Length - 1);
 		AutocompleteVm    = new AutocompleteViewModel(codeIndexService);
 		OutputSearchVm    = new OutputSearchViewModel(Messages);
@@ -454,6 +492,10 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		SendCommand           = ReactiveCommand.Create(() => { _ = SendAsync(); });
 		ToggleMarkdownCommand = ReactiveCommand.Create(() => { IsMarkdownMode = !IsMarkdownMode; });
 		ClearCommand          = ReactiveCommand.Create(() => { _pendingClear = true; });
+		CycleAutoCommitCommand = ReactiveCommand.Create(() =>
+		{
+			AutoCommitState = _autoCommitState switch { 1 => -1, -1 => 0, _ => 1 };
+		});
 
 		// Start background indexing for this session's working directory
 		if (!string.IsNullOrWhiteSpace(WorkingDirectory))
@@ -502,10 +544,13 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			var result = await _daemonService.SessionsGetAsync(_node.ExternalId);
 			foreach (var msg in result.Messages)
 			{
+				var content = msg.Role.Equals("user", StringComparison.OrdinalIgnoreCase)
+					? StripInstructionBlock(msg.Content)
+					: msg.Content;
 				Messages.Add(new MessageEntryViewModel
 				{
 					Role      = msg.Role.ToUpperInvariant(),
-					Content   = msg.Content,
+					Content   = content,
 					Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(msg.Timestamp),
 				});
 			}
@@ -2499,16 +2544,30 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 			});
 	}
 
+	/// <summary>
+	/// Strips the hidden instruction block from a user message loaded from history.
+	/// The CLI stores the full augmented prompt; we don't want to display the instructions.
+	/// </summary>
+	private static string StripInstructionBlock(string content)
+	{
+		// The delimiter is "\n\n---\n[Additional instructions..."
+		var delimIdx = content.IndexOf("\n---\n[Additional instructions", StringComparison.Ordinal);
+		if (delimIdx >= 0)
+			return content[..delimIdx].TrimEnd();
+		return content;
+	}
+
 	/// <summary>Builds the hidden instruction block appended to the user's message for claude stdin (FR.11.9).</summary>
 	private string BuildInstructionBlock()
 	{
 		var sb = new StringBuilder();
-		sb.AppendLine(Constants.Instructions.Delimiter);
 
-		// Auto-commit: always inject (ON or OFF)
-		sb.AppendLine(IsAutoCommit
-			? $"- {Constants.Instructions.AutoCommitOn}"
-			: $"- {Constants.Instructions.AutoCommitOff}");
+		// Auto-commit: inject only if not neutral
+		if (_autoCommitState > 0)
+			sb.AppendLine($"- {Constants.Instructions.AutoCommitOn}");
+		else if (_autoCommitState < 0)
+			sb.AppendLine($"- {Constants.Instructions.AutoCommitOff}");
+		// neutral (0): inject nothing about committing
 
 		if (_isNewBranch)
 			sb.AppendLine($"- {Constants.Instructions.NewBranch}");
@@ -2519,7 +2578,11 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		if (_pendingClear)
 			sb.AppendLine($"- {Constants.Instructions.Clear}");
 
-		return sb.ToString();
+		// Don't build the delimiter/block at all if no instructions were added
+		if (sb.Length == 0)
+			return string.Empty;
+
+		return Constants.Instructions.Delimiter + "\n" + sb.ToString();
 	}
 
 	/// <summary>Rebuilds the AvailableProfiles list from appsettings. Always ends with "New...".</summary>
@@ -2632,7 +2695,9 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 		=> new()
 		{
 			Role      = entry.Role,
-			Content   = entry.Content,
+			Content   = entry.Role == Constants.SessionFile.RoleUser
+				? StripInstructionBlock(entry.Content)
+				: entry.Content,
 			Timestamp = entry.Timestamp,
 		};
 }

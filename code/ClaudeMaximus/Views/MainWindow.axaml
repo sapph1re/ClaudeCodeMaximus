@@ -107,17 +107,16 @@
                             VerticalAlignment="Center"/>
 
                     <!-- FR.11 Session Instruction Toolbar -->
-                    <!-- Auto-Commit toggle (FR.11.3) -->
-                    <ToggleButton IsChecked="{Binding IsAutoCommit}"
-                                  IsEnabled="{Binding HasActiveSession}"
-                                  Width="30" Height="26" Padding="0"
-                                  Background="Transparent" BorderThickness="1"
-                                  BorderBrush="Transparent"
-                                  VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
-                                  ToolTip.Tip="Auto-Commit: commit changes after each prompt">
-                        <TextBlock Text="&#x2713;" FontSize="14"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </ToggleButton>
+                    <!-- Auto-Commit ternary toggle (FR.11.3) -->
+                    <Button Content="{Binding AutoCommitLabel}"
+                            Command="{Binding CycleAutoCommitCommand}"
+                            IsEnabled="{Binding HasActiveSession}"
+                            Height="26" Padding="6,0"
+                            Background="Transparent" BorderThickness="1"
+                            BorderBrush="Transparent"
+                            VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            FontSize="11"
+                            ToolTip.Tip="Cycle: commit &#x2192; no commit &#x2192; neutral"/>
                     <!-- New Branch toggle (FR.11.4) -->
                     <ToggleButton IsChecked="{Binding IsNewBranch}"
                                   IsEnabled="{Binding HasActiveSession}"
