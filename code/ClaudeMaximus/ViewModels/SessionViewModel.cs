@@ -1906,21 +1906,21 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 
 		try
 		{
-			var profile = SelectedDaemonProfile ?? "default";
 			var result = await _daemonService.UsageGetAsync(SelectedDaemonProfile);
 			var sb = new StringBuilder();
 			sb.AppendLine("/usage");
 
-			// Rate limit info
+			// Rate limit info — fields: rateLimit.type, rateLimit.status, rateLimit.resetsAt (unix ms)
 			if (result.TryGetProperty("rateLimit", out var rl) && rl.ValueKind == JsonValueKind.Object)
 			{
-				var window = rl.TryGetProperty("window", out var w) ? w.GetString() ?? "unknown" : "unknown";
-				var allowed = rl.TryGetProperty("allowed", out var a) && a.GetBoolean();
-				var resetsAt = rl.TryGetProperty("resetsAt", out var ra) ? ra.GetString() : null;
+				var limitType = rl.TryGetProperty("type", out var lt) ? lt.GetString() ?? "unknown" : "unknown";
+				var status = rl.TryGetProperty("status", out var st) ? st.GetString() ?? "unknown" : "unknown";
 
 				var resetText = "";
-				if (resetsAt != null && DateTimeOffset.TryParse(resetsAt, out var resetTime))
+				if (rl.TryGetProperty("resetsAt", out var ra) && ra.ValueKind == JsonValueKind.Number)
 				{
+					var resetsAtMs = ra.GetInt64();
+					var resetTime = DateTimeOffset.FromUnixTimeMilliseconds(resetsAtMs);
 					var remaining = resetTime - DateTimeOffset.UtcNow;
 					if (remaining.TotalSeconds > 0)
 					{
@@ -1930,16 +1930,16 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 					}
 				}
 
-				sb.AppendLine($"Rate limit: {window}, {(allowed ? "allowed" : "limited")}{resetText}");
+				var typeLabel = limitType.Replace("_", " ");
+				sb.AppendLine($"Rate limit: {typeLabel}, {status}{resetText}");
 			}
 
-			// Token usage
-			if (result.TryGetProperty("tokens", out var tok) && tok.ValueKind == JsonValueKind.Object)
+			// Token usage — top-level fields: inputTokens, outputTokens, cacheReadInputTokens, etc.
 			{
-				var input = tok.TryGetProperty("input", out var ti) ? ti.GetInt64() : 0;
-				var output = tok.TryGetProperty("output", out var to) ? to.GetInt64() : 0;
-				var cacheRead = tok.TryGetProperty("cacheRead", out var cr) ? cr.GetInt64() : 0;
-				var cacheCreated = tok.TryGetProperty("cacheCreated", out var cc) ? cc.GetInt64() : 0;
+				var input = result.TryGetProperty("inputTokens", out var ti) ? ti.GetInt64() : 0;
+				var output = result.TryGetProperty("outputTokens", out var to2) ? to2.GetInt64() : 0;
+				var cacheRead = result.TryGetProperty("cacheReadInputTokens", out var cr) ? cr.GetInt64() : 0;
+				var cacheCreated = result.TryGetProperty("cacheCreationInputTokens", out var cc) ? cc.GetInt64() : 0;
 
 				var parts = new List<string>();
 				if (cacheRead > 0) parts.Add($"{FormatTokenCount(cacheRead)} cache read");
@@ -1949,11 +1949,10 @@ public sealed class SessionViewModel : ViewModelBase, IDisposable
 				sb.AppendLine($"Tokens: {FormatTokenCount(input)} in / {FormatTokenCount(output)} out{cacheInfo}");
 			}
 
-			// Cost
-			if (result.TryGetProperty("cost", out var cost))
+			// Cost — top-level field: totalCostUsd
+			if (result.TryGetProperty("totalCostUsd", out var cost) && cost.ValueKind == JsonValueKind.Number)
 			{
-				var costValue = cost.GetDecimal();
-				sb.AppendLine($"Cost: ${costValue:F4}");
+				sb.AppendLine($"Cost: ${cost.GetDouble():F4}");
 			}
 
 			Messages.Add(new MessageEntryViewModel
