@@ -707,15 +707,10 @@ public sealed class ImportPickerViewModel : ViewModelBase
 			return;
 		}
 
-		// Add remaining items after matched
+		// Show only matched items
 		Items.Clear();
 		foreach (var item in matched)
 			Items.Add(item);
-		foreach (var item in _allItems)
-		{
-			if (!matchedSet.Contains(item.SessionId))
-				Items.Add(item);
-		}
 	}
 
 	private void FallbackSubstringSearch(string query)
@@ -735,14 +730,13 @@ public sealed class ImportPickerViewModel : ViewModelBase
 				unmatched.Add(item);
 		}
 
+		// Show only matched items
 		Items.Clear();
 		foreach (var item in matched)
 			Items.Add(item);
-		foreach (var item in unmatched)
-			Items.Add(item);
 
 		StatusMessage = matched.Count > 0
-			? $"Found {matched.Count} matching sessions (local search)."
+			? $"Found {matched.Count} matching sessions."
 			: "No matching sessions found.";
 	}
 
